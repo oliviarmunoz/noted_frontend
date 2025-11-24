@@ -6,8 +6,8 @@
         <div class="sidebar-section">
           <h2 class="sidebar-title">TO LISTEN</h2>
           <ul class="song-list">
-            <li class="song-item" v-for="i in 4" :key="i">
-              <input type="checkbox" class="checkbox" />
+            <li class="song-item" v-for="i in 4" :key="i" @click="$router.push(`/song/${i}`)" style="cursor: pointer;">
+              <input type="checkbox" class="checkbox" @click.stop />
               <div class="song-info">
                 <div class="song-name">Song / Album Name</div>
                 <div class="song-artist">Artist</div>
@@ -19,8 +19,8 @@
         <div class="sidebar-section">
           <h2 class="sidebar-title">FAVORITES</h2>
           <ul class="song-list">
-            <li class="song-item" v-for="i in 4" :key="i">
-              <input type="checkbox" class="checkbox" />
+            <li class="song-item" v-for="i in 4" :key="i" @click="$router.push(`/song/${i + 10}`)" style="cursor: pointer;">
+              <input type="checkbox" class="checkbox" @click.stop />
               <div class="song-info">
                 <div class="song-name">Song / Album Name</div>
                 <div class="song-artist">Artist</div>
@@ -39,7 +39,7 @@
               <span class="reviewer-name">{{ review.reviewer }} reviewed</span>
             </div>
           </div>
-          <div class="song-details">
+          <div class="song-details" @click="$router.push(`/song/${review.songId}`)" style="cursor: pointer;">
             <span class="play-icon">▶</span>
             <div class="song-text">
               <div class="song-title">{{ review.song }}</div>
@@ -84,6 +84,7 @@ export default {
           artist: "Taylor Swift",
           rating: 4,
           comment: "I loved this song!",
+          songId: 1,
         },
         {
           id: 2,
@@ -92,6 +93,7 @@ export default {
           artist: "Sabrina Carpenter",
           rating: 4,
           comment: "Great song!",
+          songId: 2,
         },
       ],
     };
@@ -151,6 +153,13 @@ export default {
   display: flex;
   align-items: flex-start;
   gap: 0.75rem;
+  padding: 0.5rem;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.song-item:hover {
+  background-color: rgba(74, 158, 255, 0.1);
 }
 
 .checkbox {
@@ -221,6 +230,11 @@ export default {
   align-items: center;
   gap: 1rem;
   margin-bottom: 1rem;
+  transition: opacity 0.2s ease;
+}
+
+.song-details:hover {
+  opacity: 0.8;
 }
 
 .play-icon {

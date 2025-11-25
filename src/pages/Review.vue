@@ -404,13 +404,21 @@ export default {
 
             const reviewUserId = r.user || r.author;
 
-            // Get username for the reviewer
+            // Get username for the reviewer using _getUsername API
             let username = reviewUserId;
             if (reviewUserId) {
               try {
                 const usernameResponse = await auth.getUsername(reviewUserId);
+                // _getUsername returns an array: [{ username: "String" }]
                 if (usernameResponse && !usernameResponse.error) {
-                  username = usernameResponse.username || reviewUserId;
+                  if (
+                    Array.isArray(usernameResponse) &&
+                    usernameResponse.length > 0
+                  ) {
+                    username = usernameResponse[0].username || reviewUserId;
+                  } else if (usernameResponse.username) {
+                    username = usernameResponse.username;
+                  }
                 }
               } catch (err) {
                 console.warn(

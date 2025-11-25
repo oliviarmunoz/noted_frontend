@@ -109,10 +109,21 @@
             @click="navigateFromFeed(review)"
             style="cursor: pointer"
           >
-            <span class="play-icon">▶</span>
+            <img
+              v-if="review.imageUrl"
+              :src="review.imageUrl"
+              :alt="review.song"
+              class="song-thumbnail-feed"
+            />
+            <div v-else class="song-thumbnail-placeholder-feed">
+              {{ review.song?.charAt(0) || "?" }}
+            </div>
             <div class="song-text">
               <div class="song-title">{{ review.song }}</div>
               <div class="song-artist">{{ review.artist }}</div>
+              <div v-if="review.album" class="song-album">
+                {{ review.album }}
+              </div>
             </div>
           </div>
           <div class="rating">
@@ -185,7 +196,7 @@ export default {
     const { showToastNotification } = useToast();
     const { playlistUpdateEvent } = usePlaylistEvents();
 
-    // Load favorites
+    // Load favorites with enhanced entity information
     const loadFavorites = async () => {
       if (!userId.value) {
         favoritesItems.value = [];
@@ -202,7 +213,134 @@ export default {
           favoritesError.value = result.error;
           favoritesItems.value = [];
         } else {
-          favoritesItems.value = result.items;
+          // Enhance items with entity information if not already complete
+          favoritesItems.value = await Promise.all(
+            (result.items || []).map(async (item) => {
+              // If item already has complete info, return as is
+              if (
+                item.name &&
+                item.name !== "Unknown" &&
+                item.artist !== undefined
+              ) {
+                return item;
+              }
+
+              // Otherwise, try to get entity information
+              const itemId = item.item || item;
+              try {
+                // Try as external ID first
+                let entityResponse = await musicDiscovery.getEntityFromId(
+                  itemId
+                );
+
+                // Extract musicEntity from response
+                let musicEntity = null;
+                if (
+                  Array.isArray(entityResponse) &&
+                  entityResponse.length > 0
+                ) {
+                  musicEntity =
+                    entityResponse[0].musicEntity || entityResponse[0];
+                } else if (entityResponse?.musicEntity) {
+                  musicEntity = entityResponse.musicEntity;
+                } else if (entityResponse && !entityResponse.error) {
+                  musicEntity = entityResponse;
+                }
+
+                // If that didn't work, try as URI
+                if (!musicEntity || musicEntity.error) {
+                  try {
+                    entityResponse = await musicDiscovery.getEntityFromUri(
+                      itemId
+                    );
+                    if (
+                      Array.isArray(entityResponse) &&
+                      entityResponse.length > 0
+                    ) {
+                      musicEntity =
+                        entityResponse[0].musicEntity || entityResponse[0];
+                    } else if (entityResponse?.musicEntity) {
+                      musicEntity = entityResponse.musicEntity;
+                    } else if (entityResponse && !entityResponse.error) {
+                      musicEntity = entityResponse;
+                    }
+                  } catch (e) {
+                    console.warn(
+                      `[Home] Could not load entity by URI for ${itemId}:`,
+                      e
+                    );
+                  }
+                }
+
+                // Get review information for this item
+                let reviewData = null;
+                try {
+                  const reviewResponse = await review.getReviewByItemAndUser(
+                    itemId,
+                    userId.value
+                  );
+                  // API returns array: [{ "review": "string", "rating": "number", "notes": "string" }]
+                  if (
+                    reviewResponse &&
+                    !reviewResponse.error &&
+                    Array.isArray(reviewResponse) &&
+                    reviewResponse.length > 0
+                  ) {
+                    reviewData = reviewResponse[0];
+                  } else if (
+                    reviewResponse &&
+                    !reviewResponse.error &&
+                    reviewResponse.rating
+                  ) {
+                    reviewData = reviewResponse;
+                  }
+                } catch (reviewErr) {
+                  console.warn(
+                    `[Home] Could not load review for ${itemId}:`,
+                    reviewErr
+                  );
+                }
+
+                // Update item with entity information
+                if (musicEntity && !musicEntity.error) {
+                  return {
+                    item: item.item || itemId,
+                    name: musicEntity.name || item.name || "Unknown",
+                    artist:
+                      musicEntity.artistName ||
+                      musicEntity.artist ||
+                      item.artist ||
+                      "",
+                    uri:
+                      musicEntity.uri ||
+                      musicEntity.externalId ||
+                      item.uri ||
+                      itemId,
+                    imageUrl: musicEntity.imageUrl || item.imageUrl || null,
+                    rating: reviewData?.rating || null,
+                    reviewNotes: reviewData?.notes || null,
+                  };
+                }
+
+                // If entity loading failed but we have review data, include it
+                if (reviewData) {
+                  return {
+                    ...item,
+                    rating: reviewData.rating || null,
+                    reviewNotes: reviewData.notes || null,
+                  };
+                }
+              } catch (err) {
+                console.warn(
+                  `[Home] Error loading entity info for ${itemId}:`,
+                  err
+                );
+              }
+
+              // Return original item if entity loading failed
+              return item;
+            })
+          );
         }
       } catch (error) {
         console.error("[Home] Error loading favorites:", error);
@@ -213,7 +351,7 @@ export default {
       }
     };
 
-    // Load listen later
+    // Load listen later with enhanced entity information
     const loadListenLater = async () => {
       if (!userId.value) {
         listenLaterItems.value = [];
@@ -232,7 +370,134 @@ export default {
           listenLaterError.value = result.error;
           listenLaterItems.value = [];
         } else {
-          listenLaterItems.value = result.items;
+          // Enhance items with entity information if not already complete
+          listenLaterItems.value = await Promise.all(
+            (result.items || []).map(async (item) => {
+              // If item already has complete info, return as is
+              if (
+                item.name &&
+                item.name !== "Unknown" &&
+                item.artist !== undefined
+              ) {
+                return item;
+              }
+
+              // Otherwise, try to get entity information
+              const itemId = item.item || item;
+              try {
+                // Try as external ID first
+                let entityResponse = await musicDiscovery.getEntityFromId(
+                  itemId
+                );
+
+                // Extract musicEntity from response
+                let musicEntity = null;
+                if (
+                  Array.isArray(entityResponse) &&
+                  entityResponse.length > 0
+                ) {
+                  musicEntity =
+                    entityResponse[0].musicEntity || entityResponse[0];
+                } else if (entityResponse?.musicEntity) {
+                  musicEntity = entityResponse.musicEntity;
+                } else if (entityResponse && !entityResponse.error) {
+                  musicEntity = entityResponse;
+                }
+
+                // If that didn't work, try as URI
+                if (!musicEntity || musicEntity.error) {
+                  try {
+                    entityResponse = await musicDiscovery.getEntityFromUri(
+                      itemId
+                    );
+                    if (
+                      Array.isArray(entityResponse) &&
+                      entityResponse.length > 0
+                    ) {
+                      musicEntity =
+                        entityResponse[0].musicEntity || entityResponse[0];
+                    } else if (entityResponse?.musicEntity) {
+                      musicEntity = entityResponse.musicEntity;
+                    } else if (entityResponse && !entityResponse.error) {
+                      musicEntity = entityResponse;
+                    }
+                  } catch (e) {
+                    console.warn(
+                      `[Home] Could not load entity by URI for ${itemId}:`,
+                      e
+                    );
+                  }
+                }
+
+                // Get review information for this item
+                let reviewData = null;
+                try {
+                  const reviewResponse = await review.getReviewByItemAndUser(
+                    itemId,
+                    userId.value
+                  );
+                  // API returns array: [{ "review": "string", "rating": "number", "notes": "string" }]
+                  if (
+                    reviewResponse &&
+                    !reviewResponse.error &&
+                    Array.isArray(reviewResponse) &&
+                    reviewResponse.length > 0
+                  ) {
+                    reviewData = reviewResponse[0];
+                  } else if (
+                    reviewResponse &&
+                    !reviewResponse.error &&
+                    reviewResponse.rating
+                  ) {
+                    reviewData = reviewResponse;
+                  }
+                } catch (reviewErr) {
+                  console.warn(
+                    `[Home] Could not load review for ${itemId}:`,
+                    reviewErr
+                  );
+                }
+
+                // Update item with entity information
+                if (musicEntity && !musicEntity.error) {
+                  return {
+                    item: item.item || itemId,
+                    name: musicEntity.name || item.name || "Unknown",
+                    artist:
+                      musicEntity.artistName ||
+                      musicEntity.artist ||
+                      item.artist ||
+                      "",
+                    uri:
+                      musicEntity.uri ||
+                      musicEntity.externalId ||
+                      item.uri ||
+                      itemId,
+                    imageUrl: musicEntity.imageUrl || item.imageUrl || null,
+                    rating: reviewData?.rating || null,
+                    reviewNotes: reviewData?.notes || null,
+                  };
+                }
+
+                // If entity loading failed but we have review data, include it
+                if (reviewData) {
+                  return {
+                    ...item,
+                    rating: reviewData.rating || null,
+                    reviewNotes: reviewData.notes || null,
+                  };
+                }
+              } catch (err) {
+                console.warn(
+                  `[Home] Error loading entity info for ${itemId}:`,
+                  err
+                );
+              }
+
+              // Return original item if entity loading failed
+              return item;
+            })
+          );
         }
       } catch (error) {
         console.error("[Home] Error loading listen later:", error);
@@ -405,77 +670,72 @@ export default {
             const userReviews = userReviewsResponse || [];
 
             // Get entity details for each review
+            // For each review, get the target field and use it to get the music entity
             for (const reviewData of userReviews) {
               try {
-                const target = reviewData.target;
-                let entityInfo = null;
+                // Get the target from the review (API spec uses "target", not "item")
+                const target = reviewData.item;
                 let musicEntity = null;
 
-                // Try to get entity details from the target
+                // Get the music entity information using getEntityFromId with the target
                 if (target) {
                   try {
-                    // Try as external ID first
-                    const entityResponse = await musicDiscovery.getEntityFromId(
+                    const entityResponse = await musicDiscovery.getEntity(
                       target
                     );
-                    if (
-                      entityResponse &&
-                      !entityResponse.error &&
-                      entityResponse.length > 0
-                    ) {
-                      entityInfo = entityResponse[0];
-                      // Extract musicEntity from the response (same pattern as Review.vue)
-                      if (entityInfo.musicEntity) {
-                        musicEntity = entityInfo.musicEntity;
-                      } else {
-                        musicEntity = entityInfo;
+                    console.log("entityResponse", entityResponse);
+
+                    if (entityResponse && entityResponse.error) {
+                      console.warn(
+                        `Error loading entity for target ${target}:`,
+                        entityResponse.error
+                      );
+                    } else if (entityResponse) {
+                      // Extract musicEntity from the response
+                      // According to API spec, _getEntityFromId returns:
+                      // [{ "musicEntity": {...} }]
+                      if (
+                        Array.isArray(entityResponse) &&
+                        entityResponse.length > 0
+                      ) {
+                        // Response is an array, get first element
+                        const firstResponse = entityResponse[0];
+                        musicEntity =
+                          firstResponse.musicEntity || firstResponse;
+                      } else if (entityResponse.musicEntity) {
+                        // Response has musicEntity property
+                        musicEntity = entityResponse.musicEntity;
+                      } else if (
+                        entityResponse._id ||
+                        entityResponse.name ||
+                        entityResponse.externalId
+                      ) {
+                        // Response is the entity directly (fallback)
+                        musicEntity = entityResponse;
                       }
                     }
                   } catch (e) {
-                    // If that fails, try as URI
-                    try {
-                      const entityResponse =
-                        await musicDiscovery.getEntityFromUri(target);
-                      if (
-                        entityResponse &&
-                        !entityResponse.error &&
-                        entityResponse.length > 0
-                      ) {
-                        entityInfo = entityResponse[0];
-                        // Extract musicEntity from the response (same pattern as Review.vue)
-                        if (entityInfo.musicEntity) {
-                          musicEntity = entityInfo.musicEntity;
-                        } else {
-                          musicEntity = entityInfo;
-                        }
-                      } else if (
-                        entityResponse &&
-                        !entityResponse.error &&
-                        !Array.isArray(entityResponse)
-                      ) {
-                        // Handle non-array response
-                        entityInfo = entityResponse;
-                        if (entityInfo.musicEntity) {
-                          musicEntity = entityInfo.musicEntity;
-                        } else {
-                          musicEntity = entityInfo;
-                        }
-                      }
-                    } catch (e2) {
-                      console.warn(
-                        `Could not get entity info for target ${target}:`,
-                        e2
-                      );
-                    }
+                    console.warn(
+                      `Error getting entity info for target ${target}:`,
+                      e
+                    );
                   }
                 }
 
-                // Get reviewer username
+                // Get reviewer username using _getUsername API
                 let reviewerName = friendId;
                 try {
                   const usernameResponse = await auth.getUsername(friendId);
+                  // _getUsername returns an array: [{ username: "String" }]
                   if (usernameResponse && !usernameResponse.error) {
-                    reviewerName = usernameResponse.username || friendId;
+                    if (
+                      Array.isArray(usernameResponse) &&
+                      usernameResponse.length > 0
+                    ) {
+                      reviewerName = usernameResponse[0].username || friendId;
+                    } else if (usernameResponse.username) {
+                      reviewerName = usernameResponse.username;
+                    }
                   }
                 } catch (e) {
                   console.warn(
@@ -484,25 +744,33 @@ export default {
                   );
                 }
 
-                // Extract URI from musicEntity if available
+                // Extract URI and other info from musicEntity
                 const songUri =
                   musicEntity?.uri || musicEntity?.externalId || target;
+                const songName = musicEntity?.name || "Unknown Song";
+                const songArtist =
+                  musicEntity?.artistName ||
+                  musicEntity?.artist ||
+                  "Unknown Artist";
+                const songImageUrl = musicEntity?.imageUrl || null;
+                const songAlbum =
+                  musicEntity?.album || musicEntity?.albumName || null;
 
+                // Push review with complete music entity information
                 allReviews.push({
                   id: reviewData.review,
                   reviewer: reviewerName,
-                  song: musicEntity?.name || "Unknown Song",
-                  artist:
-                    musicEntity?.artistName ||
-                    musicEntity?.artist ||
-                    "Unknown Artist",
+                  song: songName,
+                  artist: songArtist,
+                  album: songAlbum,
+                  imageUrl: songImageUrl,
                   rating: reviewData.rating || 0,
-                  comment: reviewData.text || reviewData.notes || "",
+                  comment: reviewData.notes || "",
                   songId: target,
                   songUri: songUri,
                   uri: songUri,
-                  target: target,
-                  entityInfo: musicEntity,
+                  item: target, // Keep for backward compatibility
+                  musicEntity: musicEntity,
                 });
               } catch (err) {
                 console.warn(
@@ -768,6 +1036,35 @@ export default {
 .song-artist {
   font-size: 0.9rem;
   color: #7b8ca8;
+}
+
+.song-album {
+  font-size: 0.85rem;
+  color: #4a5568;
+  margin-top: 0.25rem;
+}
+
+.song-thumbnail-feed {
+  width: 60px;
+  height: 60px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.song-thumbnail-placeholder-feed {
+  width: 60px;
+  height: 60px;
+  border-radius: 6px;
+  background: rgba(74, 158, 255, 0.1);
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.8rem;
+  font-weight: 900;
+  color: #ffffff;
+  flex-shrink: 0;
 }
 
 .rating {

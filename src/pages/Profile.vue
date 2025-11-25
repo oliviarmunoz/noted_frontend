@@ -458,7 +458,7 @@ export default {
         const reviewsWithDetails = await Promise.all(
           (result || []).map(async (reviewItem) => {
             // The target is the externalId (Spotify ID)
-            const entity = await loadEntityByExternalId(reviewItem.target);
+            const entity = await loadEntityByExternalId(reviewItem.item);
             return {
               ...reviewItem,
               songName: entity.name,

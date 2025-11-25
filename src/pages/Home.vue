@@ -1,10 +1,9 @@
 <template>
   <div class="page">
     <div class="home-layout">
-      <!-- Sidebar -->
       <aside class="sidebar">
         <div class="sidebar-section">
-          <h2 class="sidebar-title">TO LISTEN</h2>
+          <h2 class="sidebar-title">LISTEN LATER</h2>
           <ul class="song-list">
             <li
               class="song-item"
@@ -44,75 +43,200 @@
 
       <!-- Main Feed -->
       <main class="feed">
-        <div class="review-card" v-for="review in reviews" :key="review.id">
-          <div class="review-header">
-            <div class="user-icon">👤</div>
-            <div class="review-meta">
-              <span class="reviewer-name">{{ review.reviewer }} reviewed</span>
-            </div>
-          </div>
-          <div
-            class="song-details"
-            @click="$router.push(`/song/${review.songId}`)"
-            style="cursor: pointer"
-          >
-            <span class="play-icon">▶</span>
-            <div class="song-text">
-              <div class="song-title">{{ review.song }}</div>
-              <div class="song-artist">{{ review.artist }}</div>
-            </div>
-          </div>
-          <div class="rating">
-            <span
-              v-for="i in 5"
-              :key="i"
-              class="star"
-              :class="{ filled: i <= review.rating }"
-            >
-              ★
-            </span>
-          </div>
-          <p class="review-comment">{{ review.comment }}</p>
-          <div class="comment-input">
-            <span class="comment-icon">👤</span>
-            <input
-              type="text"
-              placeholder="Leave a comment"
-              class="comment-field"
-            />
-          </div>
+        <div v-if="loading" class="loading">Loading feed...</div>
+        <div v-else-if="error" class="error">{{ error }}</div>
+        <div v-else-if="reviews.length === 0" class="no-reviews">
+          No reviews from friends yet. Start following people to see their
+          reviews!
         </div>
+        <template v-else>
+          <div class="review-card" v-for="review in reviews" :key="review.id">
+            <div class="review-header">
+              <div class="user-icon">👤</div>
+              <div class="review-meta">
+                <span class="reviewer-name"
+                  >{{ review.reviewer }} reviewed</span
+                >
+              </div>
+            </div>
+            <div
+              class="song-details"
+              @click="$router.push(`/song/${review.songId}`)"
+              style="cursor: pointer"
+            >
+              <span class="play-icon">▶</span>
+              <div class="song-text">
+                <div class="song-title">{{ review.song }}</div>
+                <div class="song-artist">{{ review.artist }}</div>
+              </div>
+            </div>
+            <div class="rating">
+              <span
+                v-for="i in 5"
+                :key="i"
+                class="star"
+                :class="{ filled: i <= review.rating }"
+              >
+                ★
+              </span>
+            </div>
+            <p class="review-comment">{{ review.comment }}</p>
+            <div class="comment-input">
+              <span class="comment-icon">👤</span>
+              <input
+                type="text"
+                placeholder="Leave a comment"
+                class="comment-field"
+              />
+            </div>
+          </div>
+        </template>
       </main>
     </div>
   </div>
 </template>
 
 <script>
+import { friending, review, musicDiscovery, auth } from "../api/api.js";
+
 export default {
   name: "Home",
   data() {
     return {
-      reviews: [
-        {
-          id: 1,
-          reviewer: "Angela",
-          song: "22",
-          artist: "Taylor Swift",
-          rating: 4,
-          comment: "I loved this song!",
-          songId: 1,
-        },
-        {
-          id: 2,
-          reviewer: "Victor",
-          song: "Espresso",
-          artist: "Sabrina Carpenter",
-          rating: 4,
-          comment: "Great song!",
-          songId: 2,
-        },
-      ],
+      reviews: [],
+      loading: true,
+      error: null,
     };
+  },
+  async mounted() {
+    await this.loadFeed();
+  },
+  methods: {
+    async loadFeed() {
+      this.loading = true;
+      this.error = null;
+
+      try {
+        // TODO: Replace with actual current user later
+        const currentUser = "user1";
+
+        // Get friends of the current user
+        const friendsResponse = await friending.getFriends(currentUser);
+
+        if (friendsResponse && friendsResponse.error) {
+          throw new Error(friendsResponse.error);
+        }
+
+        const friends = friendsResponse || [];
+        const friendIds = friends.map((f) => f.friend || f);
+
+        // Get reviews from all friends
+        const allReviews = [];
+
+        for (const friendId of friendIds) {
+          try {
+            const userReviewsResponse = await review.getUserReviews(friendId);
+
+            if (userReviewsResponse && userReviewsResponse.error) {
+              console.warn(
+                `Error fetching reviews for friend ${friendId}:`,
+                userReviewsResponse.error
+              );
+              continue;
+            }
+
+            const userReviews = userReviewsResponse || [];
+
+            // Get entity details for each review
+            for (const reviewData of userReviews) {
+              try {
+                const target = reviewData.target;
+                let entityInfo = null;
+
+                // Try to get entity details from the target
+                if (target) {
+                  try {
+                    // Try as external ID first
+                    const entityResponse = await musicDiscovery.getEntityFromId(
+                      target
+                    );
+                    if (
+                      entityResponse &&
+                      !entityResponse.error &&
+                      entityResponse.length > 0
+                    ) {
+                      entityInfo = entityResponse[0];
+                    }
+                  } catch (e) {
+                    // If that fails, try as URI
+                    try {
+                      const entityResponse =
+                        await musicDiscovery.getEntityFromUri(target);
+                      if (
+                        entityResponse &&
+                        !entityResponse.error &&
+                        entityResponse.length > 0
+                      ) {
+                        entityInfo = entityResponse[0];
+                      }
+                    } catch (e2) {
+                      console.warn(
+                        `Could not get entity info for target ${target}:`,
+                        e2
+                      );
+                    }
+                  }
+                }
+
+                // Get reviewer username
+                let reviewerName = friendId;
+                try {
+                  const usernameResponse = await auth.getUsername(friendId);
+                  if (usernameResponse && !usernameResponse.error) {
+                    reviewerName = usernameResponse.username || friendId;
+                  }
+                } catch (e) {
+                  console.warn(
+                    `Could not get username for user ${friendId}:`,
+                    e
+                  );
+                }
+
+                allReviews.push({
+                  id: reviewData.review,
+                  reviewer: reviewerName,
+                  song: entityInfo?.name || "Unknown Song",
+                  artist:
+                    entityInfo?.artistName ||
+                    entityInfo?.artist ||
+                    "Unknown Artist",
+                  rating: reviewData.rating || 0,
+                  comment: reviewData.text || reviewData.notes || "",
+                  songId: target,
+                  target: target,
+                  entityInfo: entityInfo,
+                });
+              } catch (err) {
+                console.warn(
+                  `Error processing review ${reviewData.review}:`,
+                  err
+                );
+              }
+            }
+          } catch (err) {
+            console.warn(`Error fetching reviews for friend ${friendId}:`, err);
+          }
+        }
+
+        // Sort reviews by most recent
+        this.reviews = allReviews;
+      } catch (err) {
+        console.error("Error loading feed:", err);
+        this.error = err.message || "Failed to load feed";
+      } finally {
+        this.loading = false;
+      }
+    },
   },
 };
 </script>
@@ -327,6 +451,19 @@ export default {
 
 .comment-field::placeholder {
   color: #4a5568;
+}
+
+.loading,
+.error,
+.no-reviews {
+  text-align: center;
+  padding: 3rem;
+  color: #7b8ca8;
+  font-size: 1rem;
+}
+
+.error {
+  color: #ff6b9d;
 }
 
 @media (max-width: 968px) {

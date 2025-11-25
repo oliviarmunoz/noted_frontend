@@ -5,6 +5,7 @@ import Login from '../pages/Login.vue'
 import Signup from '../pages/Signup.vue'
 import { useAuth } from '../composables/useAuth'
 import Playlists from '../pages/Playlists.vue'
+import Profile from '../pages/Profile.vue'
 
 const routes = [
   {
@@ -35,6 +36,12 @@ const routes = [
     path: '/playlists',
     name: 'Playlists',
     component: Playlists,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/profile',
+    name: 'Profile',
+    component: Profile,
     meta: { requiresAuth: true }
   }
 ]

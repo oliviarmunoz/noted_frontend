@@ -21,111 +21,124 @@ async function apiCall(endpoint, body = {}) {
 
 // Friending API
 export const friending = {
-  sendFriendRequest: (sender, receiver) => 
-    apiCall('/api/Friending/sendFriendRequest', { sender, receiver }),
-  
-  acceptFriendRequest: (request) => 
-    apiCall('/api/Friending/acceptFriendRequest', { request }),
-  
-  rejectFriendRequest: (request) => 
-    apiCall('/api/Friending/rejectFriendRequest', { request }),
-  
-  unfriend: (userA, userB) => 
-    apiCall('/api/Friending/unfriend', { userA, userB }),
-  
-  getFriends: (user) => 
-    apiCall('/api/Friending/_getFriends', { user }),
-  
-  getPendingSentFriendRequests: (sender) => 
-    apiCall('/api/Friending/_getPendingSentFriendRequests', { sender }),
-  
-  getPendingReceivedFriendRequests: (receiver) => 
-    apiCall('/api/Friending/_getPendingReceivedFriendRequests', { receiver }),
+  sendFriendRequest: (user, target) =>
+    apiCall("/api/Friending/sendFriendRequest", { user, target }),
+
+  acceptFriendRequest: (requester, target) =>
+    apiCall("/api/Friending/acceptFriendRequest", { requester, target }),
+
+  removeFriendRequest: (requester, target) =>
+    apiCall("/api/Friending/removeFriendRequest", { requester, target }),
+
+  removeFriend: (user, friend) =>
+    apiCall("/api/Friending/removeFriend", { user, friend }),
+
+  getFriends: (user) => apiCall("/api/Friending/_getFriends", { user }),
+
+  getIncomingRequests: (user) =>
+    apiCall("/api/Friending/_getIncomingRequests", { user }),
+
+  getOutgoingRequests: (user) =>
+    apiCall("/api/Friending/_getOutgoingRequests", { user }),
 };
 
 // Playlist API
 export const playlist = {
-  createPlaylist: (owner, name) => 
-    apiCall('/api/Playlist/createPlaylist', { owner, name }),
-  
-  deletePlaylist: (playlist, owner) => 
-    apiCall('/api/Playlist/deletePlaylist', { playlist, owner }),
-  
-  renamePlaylist: (playlist, owner, newName) => 
-    apiCall('/api/Playlist/renamePlaylist', { playlist, owner, newName }),
-  
-  addPlaylistItem: (playlist, owner, item) => 
-    apiCall('/api/Playlist/addPlaylistItem', { playlist, owner, item }),
-  
-  removePlaylistItem: (playlist, owner, item) => 
-    apiCall('/api/Playlist/removePlaylistItem', { playlist, owner, item }),
-  
-  movePlaylistItem: (playlist, owner, item, fromIndex, toIndex) => 
-    apiCall('/api/Playlist/movePlaylistItem', { playlist, owner, item, fromIndex, toIndex }),
-  
-  getPlaylists: (owner) => 
-    apiCall('/api/Playlist/_getPlaylists', { owner }),
-  
-  getPlaylistDetails: (playlist) => 
-    apiCall('/api/Playlist/_getPlaylistDetails', { playlist }),
-  
-  getPlaylistItems: (playlist) => 
-    apiCall('/api/Playlist/_getPlaylistItems', { playlist }),
+  createPlaylist: (user, playlistName) =>
+    apiCall("/api/Playlist/createPlaylist", { user, playlistName }),
+
+  deletePlaylist: (user, playlistName) =>
+    apiCall("/api/Playlist/deletePlaylist", { user, playlistName }),
+
+  addItem: (user, item, playlistName) =>
+    apiCall("/api/Playlist/addPlaylistItem", { user, item, playlistName }),
+
+  deleteItem: (user, item, playlistName) =>
+    apiCall("/api/Playlist/removePlaylistItem", { user, item, playlistName }),
+
+  getPlaylistItems: (user, playlistName) =>
+    apiCall("/api/Playlist/_getPlaylistItems", { user, playlistName }),
+
+  getUserPlaylists: (user) => apiCall("/api/Playlist/_getUserPlaylists", { user }),
 };
 
 // Review API
 export const review = {
-  postReview: (author, target, rating, text) => 
-    apiCall('/api/Review/postReview', { author, target, rating, text }),
-  
-  updateReview: (review, author, rating, text) => 
-    apiCall('/api/Review/updateReview', { review, author, rating, text }),
-  
-  deleteReview: (review, author) => 
-    apiCall('/api/Review/deleteReview', { review, author }),
-  
-  getReviewsByTarget: (target) => 
-    apiCall('/api/Review/_getReviewsByTarget', { target }),
-  
-  getReviewsByAuthor: (author) => 
-    apiCall('/api/Review/_getReviewsByAuthor', { author }),
-  
-  getAverageRating: (target) => 
-    apiCall('/api/Review/_getAverageRating', { target }),
+  postReview: (item, user, ratingNumber, notes) =>
+    apiCall("/api/Review/postReview", { item, user, ratingNumber, notes }),
+
+  updateReview: (review, ratingNumber, notes) =>
+    apiCall("/api/Review/updateReview", { review, ratingNumber, notes }),
+
+  deleteReview: (review) => apiCall("/api/Review/deleteReview", { review }),
+
+  getReviewByItemAndUser: (item, user) =>
+    apiCall("/api/Review/_getReviewByItemAndUser", { item, user }),
+
+  addComment: (review, commenter, comment) =>
+    apiCall("/api/Review/addComment", { review, commenter, comment }),
+
+  deleteComment: (review, commentId) =>
+    apiCall("/api/Review/deleteComment", { review, commentId }),
+
+  getItemReviews: (item) => apiCall("/api/Review/_getItemReviews", { item }),
+
+  getUserReviews: (user) => apiCall("/api/Review/_getUserReviews", { user }),
+
+  getReviewComments: (review) =>
+    apiCall("/api/Review/_getReviewComments", { review }),
 };
 
 // Session API
 export const session = {
-  createSession: (user, durationMs) => 
-    apiCall('/api/Session/createSession', { user, durationMs }),
+  createSession: (user) => 
+    apiCall('/api/Session/createSession', { user }),
   
-  endSession: (session, user) => 
-    apiCall('/api/Session/endSession', { session, user }),
-  
-  getSessionUser: (session) => 
-    apiCall('/api/Session/_getSessionUser', { session }),
-  
-  getSessionExpiry: (session) => 
-    apiCall('/api/Session/_getSessionExpiry', { session }),
-  
-  cleanupExpiredSessions: () => 
-    apiCall('/api/Session/cleanupExpiredSessions', {}),
+  delete: (session) => 
+    apiCall('/api/Session/delete', { session }),
+
+  getUser: (session) =>
+    apiCall('/api/Session/_getUser', { session }),
 };
 
 // UserAuthentication API
 export const auth = {
-  register: (username, password) => 
-    apiCall('/api/UserAuthentication/register', { username, password }),
-  
-  login: (username, password) => 
-    apiCall('/api/UserAuthentication/login', { username, password }),
-  
-  changePassword: (user, oldPassword, newPassword) => 
-    apiCall('/api/UserAuthentication/changePassword', { user, oldPassword, newPassword }),
-  
-  getUsername: (user) => 
-    apiCall('/api/UserAuthentication/_getUsername', { user }),
-  
-  userExists: (username) => 
-    apiCall('/api/UserAuthentication/_userExists', { username }),
+  register: (username, password) =>
+    apiCall("/api/UserAuthentication/register", { username, password }),
+
+  login: (username, password) =>
+    apiCall("/api/UserAuthentication/login", { username, password }),
+
+  changePassword: (user, oldPassword, newPassword) =>
+    apiCall("/api/UserAuthentication/changePassword", {
+      user,
+      oldPassword,
+      newPassword,
+    }),
+
+  getUsername: (user) =>
+    apiCall("/api/UserAuthentication/_getUsername", { user }),
+
+  getUserByUsername: (username) =>
+    apiCall("/api/UserAuthentication/_getUserByUsername", { username }),
+
+  userExists: (username) =>
+    apiCall("/api/UserAuthentication/_userExists", { username }),
+};
+
+// MusicDiscovery API
+export const musicDiscovery = {
+  search: (user, query) =>
+    apiCall("/api/MusicDiscovery/search", { user, query }),
+
+  clearSearch: (user) => apiCall("/api/MusicDiscovery/clearSearch", { user }),
+
+  getSearchResults: (user) =>
+    apiCall("/api/MusicDiscovery/_getSearchResults", { user }),
+
+  getEntityFromId: (externalId) =>
+    apiCall("/api/MusicDiscovery/_getEntityFromId", { externalId }),
+
+  getEntityFromUri: (uri) =>
+    apiCall("/api/MusicDiscovery/_getEntityFromUri", { uri }),
 };

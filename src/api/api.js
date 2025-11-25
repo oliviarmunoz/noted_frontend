@@ -91,8 +91,8 @@ export const review = {
 
 // Session API
 export const session = {
-  createSession: (user) => 
-    apiCall('/api/Session/createSession', { user }),
+  create: (user) => 
+    apiCall('/api/Session/create', { user }),
   
   delete: (session) => 
     apiCall('/api/Session/delete', { session }),
@@ -106,24 +106,14 @@ export const auth = {
   register: (username, password) =>
     apiCall("/api/UserAuthentication/register", { username, password }),
 
-  login: (username, password) =>
+  authenticate: (username, password) =>
     apiCall("/api/UserAuthentication/authenticate", { username, password }),
-
-  // changePassword: (user, oldPassword, newPassword) =>
-  //   apiCall("/api/UserAuthentication/changePassword", {
-  //     user,
-  //     oldPassword,
-  //     newPassword,
-  //   }),
 
   getUsername: (user) =>
     apiCall("/api/UserAuthentication/_getUsername", { user }),
 
   getUserByUsername: (username) =>
     apiCall("/api/UserAuthentication/_getUserByUsername", { username }),
-
-  userExists: (username) =>
-    apiCall("/api/UserAuthentication/_userExists", { username }),
 };
 
 // MusicDiscovery API

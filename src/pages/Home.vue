@@ -153,7 +153,7 @@ export default {
     const listenLaterError = ref(null);
 
     // Use composables
-    const { loadPlaylistItems, removeItemFromPlaylist } = usePlaylists(userId);
+    const { loadPlaylistItems, removeItemFromPlaylist } = usePlaylists();
     const { showToastNotification } = useToast();
     const { playlistUpdateEvent } = usePlaylistEvents();
 

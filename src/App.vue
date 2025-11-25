@@ -130,7 +130,7 @@ export default {
     const userId = JSON.parse(localStorage.getItem('currentUser'));
 
     // Use composables
-    const { addItemToPlaylist } = usePlaylists(userId);
+    const { addItemToPlaylist } = usePlaylists();
     const { toastMessage, showToast, showToastNotification } = useToast();
     const { triggerPlaylistUpdate } = usePlaylistEvents();
     const { logout, isAuthenticated } = useAuth();

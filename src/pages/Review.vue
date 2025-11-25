@@ -255,7 +255,7 @@ export default {
     const userId = JSON.parse(localStorage.getItem('currentUser'));
     
     // Use composables (must be after userId is defined)
-    const { addItemToPlaylist, removeItemFromPlaylist, loadPlaylistItems } = usePlaylists(userId);
+    const { addItemToPlaylist, removeItemFromPlaylist, loadPlaylistItems } = usePlaylists();
     const { toastMessage, showToast, showToastNotification } = useToast();
     const { triggerPlaylistUpdate } = usePlaylistEvents();
 

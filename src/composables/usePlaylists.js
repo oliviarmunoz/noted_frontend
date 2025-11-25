@@ -5,7 +5,7 @@ import { useEntities } from "./useEntities.js";
 /**
  * Composable for playlist management
  */
-export function usePlaylists(userId) {
+export function usePlaylists() {
   const { loadEntityByExternalId } = useEntities();
 
   /**
@@ -15,6 +15,12 @@ export function usePlaylists(userId) {
    */
   const ensurePlaylistExists = async (playlistName) => {
     try {
+      const userId = JSON.parse(localStorage.getItem('currentUser'));
+      if (!userId) {
+        console.error('[usePlaylists] No userId found in localStorage');
+        return false;
+      }
+
       const playlists = await playlist.getUserPlaylists(userId);
       
       if (playlists && playlists.error) {
@@ -53,6 +59,11 @@ export function usePlaylists(userId) {
    */
   const addItemToPlaylist = async (itemId, playlistName) => {
     try {
+      const userId = JSON.parse(localStorage.getItem('currentUser'));
+      if (!userId) {
+        return { success: false, error: 'No userId found in localStorage' };
+      }
+
       // Ensure playlist exists
       const playlistExists = await ensurePlaylistExists(playlistName);
       if (!playlistExists) {
@@ -80,6 +91,11 @@ export function usePlaylists(userId) {
    */
   const loadPlaylistItems = async (playlistName) => {
     try {
+      const userId = JSON.parse(localStorage.getItem('currentUser'));
+      if (!userId) {
+        return { items: [], error: 'No userId found in localStorage' };
+      }
+
       const items = await playlist.getPlaylistItems(userId, playlistName);
 
       if (items && items.error) {
@@ -111,6 +127,11 @@ export function usePlaylists(userId) {
    */
   const removeItemFromPlaylist = async (itemId, playlistName) => {
     try {
+      const userId = JSON.parse(localStorage.getItem('currentUser'));
+      if (!userId) {
+        return { success: false, error: 'No userId found in localStorage' };
+      }
+
       const result = await playlist.deleteItem(userId, itemId, playlistName);
       
       if (result && result.error) {

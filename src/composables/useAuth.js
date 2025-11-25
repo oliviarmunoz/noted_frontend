@@ -2,8 +2,23 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { auth, session } from '../api/api'
 
-const currentUser = ref(null)
-const currentSession = ref(null)
+const initializeAuthState = () => {
+  try {
+    const storedUser = localStorage.getItem('currentUser')
+    const storedSession = localStorage.getItem('currentSession')
+    return {
+      user: storedUser ? JSON.parse(storedUser) : null,
+      session: storedSession ? JSON.parse(storedSession) : null
+    }
+  } catch (error) {
+    console.error('[useAuth] Error loading from localStorage:', error)
+    return { user: null, session: null }
+  }
+}
+
+const { user, session: sessionData } = initializeAuthState()
+const currentUser = ref(user)
+const currentSession = ref(sessionData)
 
 export function useAuth() {
   const router = useRouter()
@@ -24,6 +39,10 @@ export function useAuth() {
 
         currentUser.value = authData.user
         currentSession.value = sessionData.session
+        
+        // Persist to localStorage
+        localStorage.setItem('currentUser', JSON.stringify(authData.user))
+        localStorage.setItem('currentSession', JSON.stringify(sessionData.session))
         
         return { success: true }
     } catch (error) {
@@ -49,6 +68,9 @@ export function useAuth() {
         currentUser.value = registerData.user
         currentSession.value = sessionData.session
         
+        localStorage.setItem('currentUser', JSON.stringify(registerData.user))
+        localStorage.setItem('currentSession', JSON.stringify(sessionData.session))
+        
         return { success: true }
     } catch (error) {
         console.error('[useAuth] Signup error:', error)
@@ -64,6 +86,10 @@ export function useAuth() {
 
         currentUser.value = null
         currentSession.value = null
+        
+        localStorage.removeItem('currentUser')
+        localStorage.removeItem('currentSession')
+        
         router.push('/login')
     } catch (error) {
         console.error('Logout error:', error)
@@ -81,14 +107,19 @@ export function useAuth() {
         if (!data[0]) {
             currentUser.value = null
             currentSession.value = null
+            localStorage.removeItem('currentUser')
+            localStorage.removeItem('currentSession')
             return false
         }
 
         currentUser.value = data[0].user
+        localStorage.setItem('currentUser', JSON.stringify(data[0].user))
         return true
     } catch (error) {
         currentUser.value = null
         currentSession.value = null
+        localStorage.removeItem('currentUser')
+        localStorage.removeItem('currentSession')
         return false
     }
   }

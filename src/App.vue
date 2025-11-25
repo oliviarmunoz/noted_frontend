@@ -82,8 +82,8 @@
           <router-link to="/profile" class="icon-btn">
             <span class="icon">👤</span>
           </router-link>
-          <button class="icon-btn" @click="handleLogout" title="Logout">
-            <span class="icon">🚪</span>
+          <button class="icon-btn logout-btn" @click="handleLogout" title="Logout">
+            <span class="icon">Logout</span>
           </button>
         </div>
       </div>
@@ -577,6 +577,16 @@ export default {
   transition: all 0.3s ease;
   text-decoration: none;
   font-size: 1.2rem;
+}
+
+.logout-btn {
+  width: auto;
+  min-width: 5.5rem;
+  padding: 0 1.25rem;
+  height: 2.5rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
 }
 
 .icon-btn:hover {

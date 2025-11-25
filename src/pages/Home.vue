@@ -4,7 +4,9 @@
       <!-- Sidebar -->
       <aside class="sidebar">
         <div class="sidebar-section">
-          <h2 class="sidebar-title">LISTEN LATER</h2>
+          <h2 class="sidebar-title clickable-title" @click="$router.push('/playlists')">
+            LISTEN LATER
+          </h2>
           <div v-if="loadingListenLater" class="loading-text">Loading...</div>
           <div v-else-if="listenLaterError" class="error-text">{{ listenLaterError }}</div>
           <ul v-else class="song-list">
@@ -43,7 +45,9 @@
         </div>
 
         <div class="sidebar-section">
-          <h2 class="sidebar-title">FAVORITES</h2>
+          <h2 class="sidebar-title clickable-title" @click="$router.push('/playlists')">
+            FAVORITES
+          </h2>
           <div v-if="loadingFavorites" class="loading-text">Loading...</div>
           <div v-else-if="favoritesError" class="error-text">{{ favoritesError }}</div>
           <ul v-else class="song-list">
@@ -354,6 +358,15 @@ export default {
   text-transform: uppercase;
   color: #ffffff;
   margin: 0 0 1rem 0;
+}
+
+.clickable-title {
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.clickable-title:hover {
+  color: #4a9eff;
 }
 
 .song-list {

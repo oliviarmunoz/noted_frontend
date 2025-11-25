@@ -326,21 +326,33 @@
 </template>
 
 <script>
-import { ref, onMounted, watch } from "vue";
+import { ref, onMounted, watch, computed } from "vue";
 import { useRouter } from "vue-router";
 import { review, friending, auth } from "../api/api.js";
 import { useEntities } from "../composables/useEntities.js";
 import { usePlaylists } from "../composables/usePlaylists.js";
 import { usePlaylistEvents } from "../composables/usePlaylistEvents.js";
 import { useToast } from "../composables/useToast.js";
+import { useAuth } from "../composables/useAuth.js";
 
 export default {
   name: "Profile",
   setup() {
     const router = useRouter();
+    const { currentUser } = useAuth();
     
-    // TODO: Get from session/auth when implemented
-    const userId = "user1";
+    // Get userId from authenticated user
+    const userId = ref(null);
+    
+    // Update userId when currentUser changes
+    watch(
+      () => currentUser.value,
+      (user) => {
+        // currentUser might be the user object or just the user ID string
+        userId.value = user?._id || user || null;
+      },
+      { immediate: true }
+    );
     
     const username = ref("");
     const reviews = ref([]);
@@ -371,19 +383,56 @@ export default {
     const processingRequest = ref(false);
 
     const { loadEntityByExternalId } = useEntities();
-    const { loadPlaylistItems, removeItemFromPlaylist } = usePlaylists(userId);
+    
+    // usePlaylists needs a string userId, create wrapper functions that use userId.value
+    const loadPlaylistItemsWrapper = async (playlistName) => {
+      if (!userId.value) {
+        return { items: [], error: "User not authenticated" };
+      }
+      const playlistComposable = usePlaylists(userId.value);
+      return await playlistComposable.loadPlaylistItems(playlistName);
+    };
+    
+    const removeItemFromPlaylistWrapper = async (itemId, playlistName) => {
+      if (!userId.value) {
+        return { success: false, error: "User not authenticated" };
+      }
+      const playlistComposable = usePlaylists(userId.value);
+      return await playlistComposable.removeItemFromPlaylist(itemId, playlistName);
+    };
+    
+    const loadPlaylistItems = loadPlaylistItemsWrapper;
+    const removeItemFromPlaylist = removeItemFromPlaylistWrapper;
     const { playlistUpdateEvent } = usePlaylistEvents();
     const { showToastNotification } = useToast();
 
     // Load username
     const loadUsername = async () => {
       try {
-        const result = await auth.getUsername(userId);
+        if (!userId.value) {
+          username.value = "User";
+          return;
+        }
+        
+        const result = await auth.getUsername(userId.value);
+        console.log("[Profile] getUsername API response:", result);
+        
         if (result && result.error) {
           console.error("[Profile] Error loading username:", result.error);
           username.value = "User";
+          return;
+        }
+        
+        // API returns an array: [{ "username": "String" }]
+        const usernameData = Array.isArray(result) && result.length > 0 
+          ? result[0] 
+          : result;
+        
+        if (usernameData && usernameData.username) {
+          username.value = usernameData.username;
         } else {
-          username.value = result.username || "User";
+          console.warn("[Profile] Username not found in response:", result);
+          username.value = "User";
         }
       } catch (error) {
         console.error("[Profile] Error loading username:", error);
@@ -397,7 +446,7 @@ export default {
       reviewsError.value = null;
 
       try {
-        const result = await review.getUserReviews(userId);
+        const result = await review.getUserReviews(userId.value);
         
         if (result && result.error) {
           reviewsError.value = result.error;
@@ -508,7 +557,7 @@ export default {
       friendsError.value = null;
 
       try {
-        const result = await friending.getFriends(userId);
+        const result = await friending.getFriends(userId.value);
         
         if (result && result.error) {
           friendsError.value = result.error;
@@ -558,7 +607,7 @@ export default {
 
       try {
         // Load incoming requests
-        const incomingResult = await friending.getIncomingRequests(userId);
+        const incomingResult = await friending.getIncomingRequests(userId.value);
         if (incomingResult && !incomingResult.error) {
           const incomingWithNames = await Promise.all(
             (incomingResult || []).map(async (request) => {
@@ -590,7 +639,7 @@ export default {
         }
 
         // Load outgoing requests
-        const outgoingResult = await friending.getOutgoingRequests(userId);
+        const outgoingResult = await friending.getOutgoingRequests(userId.value);
         if (outgoingResult && !outgoingResult.error) {
           const outgoingWithNames = await Promise.all(
             (outgoingResult || []).map(async (request) => {
@@ -663,7 +712,7 @@ export default {
           console.log("[Profile] User found:", foundUserId);
           
           // Check if it's the current user
-          if (foundUserId === userId) {
+          if (foundUserId === userId.value) {
             console.log("[Profile] User tried to add themselves");
             userSearchError.value = "You cannot add yourself as a friend";
             searchedUser.value = null;
@@ -720,7 +769,7 @@ export default {
       userSearchError.value = null;
 
       try {
-        const result = await friending.sendFriendRequest(userId, searchedUser.value.user);
+        const result = await friending.sendFriendRequest(userId.value, searchedUser.value.user);
         
         if (result && result.error) {
           userSearchError.value = result.error || "Failed to send friend request";
@@ -747,7 +796,7 @@ export default {
       processingRequest.value = true;
 
       try {
-        const result = await friending.acceptFriendRequest(request.requester, userId);
+        const result = await friending.acceptFriendRequest(request.requester, userId.value);
         
         if (result && result.error) {
           showToastNotification(result.error || "Failed to accept friend request");
@@ -771,7 +820,7 @@ export default {
       processingRequest.value = true;
 
       try {
-        const result = await friending.removeFriendRequest(request.requester, userId);
+        const result = await friending.removeFriendRequest(request.requester, userId.value);
         
         if (result && result.error) {
           showToastNotification(result.error || "Failed to decline friend request");
@@ -795,7 +844,7 @@ export default {
       processingRequest.value = true;
 
       try {
-        const result = await friending.removeFriendRequest(userId, request.target);
+        const result = await friending.removeFriendRequest(userId.value, request.target);
         
         if (result && result.error) {
           showToastNotification(result.error || "Failed to cancel friend request");
@@ -823,7 +872,7 @@ export default {
       processingRequest.value = true;
 
       try {
-        const result = await friending.removeFriend(userId, friend.friend);
+        const result = await friending.removeFriend(userId.value, friend.friend);
         
         if (result && result.error) {
           showToastNotification(result.error || "Failed to remove friend");

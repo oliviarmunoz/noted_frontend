@@ -1,11 +1,15 @@
 <template>
   <div id="app">
     <!-- Navigation -->
-    <nav class="navbar">
+    <nav v-if="isAuthenticated()" class="navbar">
       <div class="nav-container">
         <router-link to="/" class="logo">
           <span class="caps">NOTED</span>
         </router-link>
+        <div class="nav-links">
+          <router-link to="/" class="nav-link">Home</router-link>
+          <router-link to="/playlists" class="nav-link">Playlists</router-link>
+        </div>
         <div class="nav-search" ref="searchContainer">
           <input
             type="text"
@@ -82,6 +86,9 @@
           <router-link to="/profile" class="icon-btn">
             <span class="icon">👤</span>
           </router-link>
+          <button class="icon-btn logout-btn" @click="handleLogout" title="Logout">
+            <span class="icon">Logout</span>
+          </button>
         </div>
       </div>
     </nav>
@@ -106,6 +113,7 @@ import { musicDiscovery } from "./api/api.js";
 import { usePlaylists } from "./composables/usePlaylists.js";
 import { useToast } from "./composables/useToast.js";
 import { usePlaylistEvents } from "./composables/usePlaylistEvents.js";
+import { useAuth } from "./composables/useAuth.js";
 
 export default {
   name: "App",
@@ -126,6 +134,7 @@ export default {
     const { addItemToPlaylist } = usePlaylists(userId);
     const { toastMessage, showToast, showToastNotification } = useToast();
     const { triggerPlaylistUpdate } = usePlaylistEvents();
+    const { logout, isAuthenticated } = useAuth();
 
     const performSearch = async (query) => {
       if (!query || query.trim().length === 0) {
@@ -273,6 +282,10 @@ export default {
       }
     };
 
+    const handleLogout = () => {
+      logout();
+    };
+
     // Cleanup timeout on unmount
     onUnmounted(() => {
       if (searchTimeout.value) {
@@ -294,6 +307,8 @@ export default {
       handleSearchBlur,
       addToPlaylist,
       showToastNotification,
+      handleLogout,
+      isAuthenticated,
     };
   },
 };
@@ -566,6 +581,16 @@ export default {
   transition: all 0.3s ease;
   text-decoration: none;
   font-size: 1.2rem;
+}
+
+.logout-btn {
+  width: auto;
+  min-width: 5.5rem;
+  padding: 0 1.25rem;
+  height: 2.5rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
 }
 
 .icon-btn:hover {

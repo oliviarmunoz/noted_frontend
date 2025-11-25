@@ -1,0 +1,1601 @@
+<template>
+  <div class="page">
+    <div class="profile-container">
+      <!-- User Header -->
+      <div class="profile-header">
+        <div class="user-avatar">
+          <span class="avatar-icon">👤</span>
+        </div>
+        <div class="user-info">
+          <h1 class="username">{{ username || "Loading..." }}</h1>
+          <div class="user-stats">
+            <div class="stat-item">
+              <span class="stat-value">{{ reviews.length }}</span>
+              <span class="stat-label">Reviews</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-value">{{ favoritesItems.length }}</span>
+              <span class="stat-label">Favorites</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-value">{{ listenLaterItems.length }}</span>
+              <span class="stat-label">Listen Later</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-value">{{ friends.length }}</span>
+              <span class="stat-label">Friends</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Content Sections -->
+      <div class="profile-content">
+        <!-- Reviews Section -->
+        <section class="profile-section">
+          <h2 class="section-title">REVIEWS</h2>
+          <div v-if="loadingReviews" class="loading-text">Loading reviews...</div>
+          <div v-else-if="reviewsError" class="error-text">{{ reviewsError }}</div>
+          <div v-else-if="reviews.length === 0" class="empty-message">
+            No reviews yet
+          </div>
+          <div v-else class="reviews-list">
+            <div
+              v-for="review in reviews"
+              :key="review.review"
+              class="review-item"
+            >
+              <div class="review-item-content" @click="navigateToReview(review)">
+                <div class="review-song-info">
+                  <div class="review-song-name">{{ review.songName || "Unknown Song" }}</div>
+                  <div class="review-song-artist">{{ review.songArtist || "Unknown Artist" }}</div>
+                </div>
+                <div class="review-rating">
+                  <span
+                    v-for="i in 5"
+                    :key="i"
+                    class="star"
+                    :class="{ filled: i <= (review.rating || 0) }"
+                  >
+                    ★
+                  </span>
+                </div>
+                <p v-if="review.text" class="review-text">{{ review.text }}</p>
+              </div>
+              <button
+                class="delete-review-btn"
+                @click.stop="handleDeleteReview(review)"
+                title="Delete review"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Playlists Section -->
+        <div class="playlists-grid">
+          <!-- Favorites Section -->
+          <section class="profile-section playlist-section">
+            <h2 class="section-title">FAVORITES</h2>
+            <div v-if="loadingFavorites" class="loading-text">Loading...</div>
+            <div v-else-if="favoritesError" class="error-text">{{ favoritesError }}</div>
+            <ul v-else class="song-list">
+              <li
+                v-for="item in favoritesItems"
+                :key="item.item"
+                class="song-item"
+              >
+                <div class="song-item-content" @click="navigateToReviewFromItem(item)">
+                  <img
+                    v-if="item.imageUrl"
+                    :src="item.imageUrl"
+                    :alt="item.name"
+                    class="song-thumbnail"
+                  />
+                  <div v-else class="song-thumbnail-placeholder">
+                    {{ item.name?.charAt(0) || "?" }}
+                  </div>
+                  <div class="song-info">
+                    <div class="song-name">{{ item.name || "Loading..." }}</div>
+                    <div class="song-artist">{{ item.artist || "" }}</div>
+                  </div>
+                </div>
+                <button
+                  class="remove-btn"
+                  @click.stop="removeFromPlaylist(item, 'Favorites')"
+                  title="Remove from Favorites"
+                >
+                  ×
+                </button>
+              </li>
+              <li v-if="favoritesItems.length === 0" class="empty-message">
+                No favorites yet
+              </li>
+            </ul>
+          </section>
+
+          <!-- Listen Later Section -->
+          <section class="profile-section playlist-section">
+            <h2 class="section-title">LISTEN LATER</h2>
+            <div v-if="loadingListenLater" class="loading-text">Loading...</div>
+            <div v-else-if="listenLaterError" class="error-text">{{ listenLaterError }}</div>
+            <ul v-else class="song-list">
+              <li
+                v-for="item in listenLaterItems"
+                :key="item.item"
+                class="song-item"
+              >
+                <div class="song-item-content" @click="navigateToReviewFromItem(item)">
+                  <img
+                    v-if="item.imageUrl"
+                    :src="item.imageUrl"
+                    :alt="item.name"
+                    class="song-thumbnail"
+                  />
+                  <div v-else class="song-thumbnail-placeholder">
+                    {{ item.name?.charAt(0) || "?" }}
+                  </div>
+                  <div class="song-info">
+                    <div class="song-name">{{ item.name || "Loading..." }}</div>
+                    <div class="song-artist">{{ item.artist || "" }}</div>
+                  </div>
+                </div>
+                <button
+                  class="remove-btn"
+                  @click.stop="removeFromPlaylist(item, 'Listen Later')"
+                  title="Remove from Listen Later"
+                >
+                  ×
+                </button>
+              </li>
+              <li v-if="listenLaterItems.length === 0" class="empty-message">
+                No songs in Listen Later
+              </li>
+            </ul>
+          </section>
+        </div>
+
+        <!-- Friends Section -->
+        <section class="profile-section">
+          <div class="friends-header">
+            <h2 class="section-title">FRIENDS</h2>
+            <button class="add-friend-btn" @click="showAddFriendModal = true" title="Add friend">
+              + Add Friend
+            </button>
+          </div>
+
+          <!-- Add Friend Modal -->
+          <div v-if="showAddFriendModal" class="modal-overlay" @click="showAddFriendModal = false">
+            <div class="modal-content" @click.stop>
+              <div class="modal-header">
+                <h3>Add Friend</h3>
+                <button class="modal-close" @click="showAddFriendModal = false">×</button>
+              </div>
+              <div class="modal-body">
+                <input
+                  v-model="friendSearchQuery"
+                  type="text"
+                  placeholder="Enter username"
+                  class="friend-search-input"
+                  @keyup.enter="searchUser"
+                />
+                <button
+                  class="send-request-btn"
+                  @click="searchUser"
+                  :disabled="searchingUser || !friendSearchQuery.trim()"
+                  style="width: 100%; margin-top: 0.5rem;"
+                >
+                  {{ searchingUser ? "Searching..." : "Search" }}
+                </button>
+                <div v-if="searchingUser" class="loading-text">Searching...</div>
+                <div v-if="userSearchError" class="error-text">{{ userSearchError }}</div>
+                <div v-if="searchedUser" class="searched-user">
+                  <div class="searched-user-info">
+                    <div class="friend-avatar">
+                      <span class="friend-icon">👤</span>
+                    </div>
+                    <div class="friend-info">
+                      <div class="friend-name">{{ searchedUser.username }}</div>
+                    </div>
+                  </div>
+                  <button
+                    class="send-request-btn"
+                    @click="handleSendFriendRequest"
+                    :disabled="sendingRequest"
+                  >
+                    {{ sendingRequest ? "Sending..." : "Send Request" }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Incoming Friend Requests -->
+          <div v-if="incomingRequests.length > 0" class="friend-requests-section">
+            <h3 class="subsection-title">Incoming Requests</h3>
+            <div class="friends-list">
+              <div
+                v-for="request in incomingRequests"
+                :key="request.request"
+                class="friend-item friend-request-item"
+              >
+                <div class="friend-avatar">
+                  <span class="friend-icon">👤</span>
+                </div>
+                <div class="friend-info">
+                  <div class="friend-name">{{ request.requesterName || request.requester }}</div>
+                  <div class="friend-username" v-if="request.requesterName && request.requesterName !== request.requester">
+                    {{ request.requester }}
+                  </div>
+                </div>
+                <div class="friend-actions">
+                  <button
+                    class="accept-btn"
+                    @click="handleAcceptRequest(request)"
+                    :disabled="processingRequest"
+                    title="Accept"
+                  >
+                    ✓
+                  </button>
+                  <button
+                    class="decline-btn"
+                    @click="handleDeclineRequest(request)"
+                    :disabled="processingRequest"
+                    title="Decline"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Outgoing Friend Requests -->
+          <div v-if="outgoingRequests.length > 0" class="friend-requests-section">
+            <h3 class="subsection-title">Outgoing Requests</h3>
+            <div class="friends-list">
+              <div
+                v-for="request in outgoingRequests"
+                :key="request.request"
+                class="friend-item friend-request-item"
+              >
+                <div class="friend-avatar">
+                  <span class="friend-icon">👤</span>
+                </div>
+                <div class="friend-info">
+                  <div class="friend-name">{{ request.targetName || request.target }}</div>
+                  <div class="friend-username" v-if="request.targetName && request.targetName !== request.target">
+                    {{ request.target }}
+                  </div>
+                </div>
+                <div class="friend-actions">
+                  <button
+                    class="cancel-btn"
+                    @click="handleCancelRequest(request)"
+                    :disabled="processingRequest"
+                    title="Cancel Request"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Current Friends -->
+          <div v-if="loadingFriends" class="loading-text">Loading friends...</div>
+          <div v-else-if="friendsError" class="error-text">{{ friendsError }}</div>
+          <div v-else-if="friends.length === 0 && incomingRequests.length === 0 && outgoingRequests.length === 0" class="empty-message">
+            No friends yet. Add friends to get started!
+          </div>
+          <div v-else-if="friends.length > 0" class="friend-requests-section">
+            <h3 class="subsection-title">Friends</h3>
+            <div class="friends-list">
+              <div
+                v-for="friend in friends"
+                :key="friend.friend"
+                class="friend-item"
+              >
+                <div class="friend-avatar">
+                  <span class="friend-icon">👤</span>
+                </div>
+                <div class="friend-info">
+                  <div class="friend-name">{{ friend.friendName || friend.friend }}</div>
+                  <div class="friend-username" v-if="friend.friendName && friend.friendName !== friend.friend">
+                    {{ friend.friend }}
+                  </div>
+                </div>
+                <div class="friend-actions">
+                  <button
+                    class="remove-friend-btn"
+                    @click="handleRemoveFriend(friend)"
+                    :disabled="processingRequest"
+                    title="Remove Friend"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+import { ref, onMounted, watch } from "vue";
+import { useRouter } from "vue-router";
+import { review, friending, auth } from "../api/api.js";
+import { useEntities } from "../composables/useEntities.js";
+import { usePlaylists } from "../composables/usePlaylists.js";
+import { usePlaylistEvents } from "../composables/usePlaylistEvents.js";
+import { useToast } from "../composables/useToast.js";
+
+export default {
+  name: "Profile",
+  setup() {
+    const router = useRouter();
+    
+    // TODO: Get from session/auth when implemented
+    const userId = "user1";
+    
+    const username = ref("");
+    const reviews = ref([]);
+    const favoritesItems = ref([]);
+    const listenLaterItems = ref([]);
+    const friends = ref([]);
+    const incomingRequests = ref([]);
+    const outgoingRequests = ref([]);
+    
+    const loadingReviews = ref(false);
+    const loadingFavorites = ref(false);
+    const loadingListenLater = ref(false);
+    const loadingFriends = ref(false);
+    const loadingRequests = ref(false);
+    
+    const reviewsError = ref(null);
+    const favoritesError = ref(null);
+    const listenLaterError = ref(null);
+    const friendsError = ref(null);
+    
+    // Friend search and add modal
+    const showAddFriendModal = ref(false);
+    const friendSearchQuery = ref("");
+    const searchedUser = ref(null);
+    const searchingUser = ref(false);
+    const sendingRequest = ref(false);
+    const userSearchError = ref(null);
+    const processingRequest = ref(false);
+
+    const { loadEntityByExternalId } = useEntities();
+    const { loadPlaylistItems, removeItemFromPlaylist } = usePlaylists(userId);
+    const { playlistUpdateEvent } = usePlaylistEvents();
+    const { showToastNotification } = useToast();
+
+    // Load username
+    const loadUsername = async () => {
+      try {
+        const result = await auth.getUsername(userId);
+        if (result && result.error) {
+          console.error("[Profile] Error loading username:", result.error);
+          username.value = "User";
+        } else {
+          username.value = result.username || "User";
+        }
+      } catch (error) {
+        console.error("[Profile] Error loading username:", error);
+        username.value = "User";
+      }
+    };
+
+    // Load reviews
+    const loadReviews = async () => {
+      loadingReviews.value = true;
+      reviewsError.value = null;
+
+      try {
+        const result = await review.getUserReviews(userId);
+        
+        if (result && result.error) {
+          reviewsError.value = result.error;
+          reviews.value = [];
+          return;
+        }
+
+        // Load entity details for each review
+        const reviewsWithDetails = await Promise.all(
+          (result || []).map(async (reviewItem) => {
+            // The target is the externalId (Spotify ID)
+            const entity = await loadEntityByExternalId(reviewItem.target);
+            return {
+              ...reviewItem,
+              songName: entity.name,
+              songArtist: entity.artist,
+              songUri: entity.uri,
+            };
+          })
+        );
+
+        reviews.value = reviewsWithDetails;
+      } catch (error) {
+        console.error("[Profile] Error loading reviews:", error);
+        reviewsError.value = error.message || "Failed to load reviews";
+        reviews.value = [];
+      } finally {
+        loadingReviews.value = false;
+      }
+    };
+
+    // Load favorites
+    const loadFavorites = async () => {
+      loadingFavorites.value = true;
+      favoritesError.value = null;
+
+      try {
+        const result = await loadPlaylistItems("Favorites");
+        if (result.error) {
+          favoritesError.value = result.error;
+          favoritesItems.value = [];
+        } else {
+          favoritesItems.value = result.items;
+        }
+      } catch (error) {
+        console.error("[Profile] Error loading favorites:", error);
+        favoritesError.value = error.message || "Failed to load favorites";
+        favoritesItems.value = [];
+      } finally {
+        loadingFavorites.value = false;
+      }
+    };
+
+    // Load listen later
+    const loadListenLater = async () => {
+      loadingListenLater.value = true;
+      listenLaterError.value = null;
+
+      try {
+        const result = await loadPlaylistItems("Listen Later");
+        if (result.error) {
+          listenLaterError.value = result.error;
+          listenLaterItems.value = [];
+        } else {
+          listenLaterItems.value = result.items;
+        }
+      } catch (error) {
+        console.error("[Profile] Error loading listen later:", error);
+        listenLaterError.value = error.message || "Failed to load listen later";
+        listenLaterItems.value = [];
+      } finally {
+        loadingListenLater.value = false;
+      }
+    };
+
+    // Remove item from playlist
+    const removeFromPlaylist = async (item, playlistName) => {
+      if (!item.item) {
+        showToastNotification("Error: Item ID not found");
+        return;
+      }
+
+      try {
+        const result = await removeItemFromPlaylist(item.item, playlistName);
+        
+        if (!result.success) {
+          showToastNotification(result.error || `Error removing from ${playlistName}`);
+          return;
+        }
+
+        showToastNotification(`Removed from ${playlistName}`);
+        
+        // Reload the playlist
+        if (playlistName === "Favorites") {
+          await loadFavorites();
+        } else {
+          await loadListenLater();
+        }
+      } catch (error) {
+        console.error(`[Profile] Error removing from ${playlistName}:`, error);
+        showToastNotification(`Error removing from ${playlistName}`);
+      }
+    };
+
+    // Load friends
+    const loadFriends = async () => {
+      loadingFriends.value = true;
+      friendsError.value = null;
+
+      try {
+        const result = await friending.getFriends(userId);
+        
+        if (result && result.error) {
+          friendsError.value = result.error;
+          friends.value = [];
+          return;
+        }
+
+        // Load usernames for each friend
+        const friendsWithNames = await Promise.all(
+          (result || []).map(async (friendItem) => {
+            try {
+              const usernameResult = await auth.getUsername(friendItem.friend);
+              // API returns an array: [{ "username": "String" }]
+              const usernameData = Array.isArray(usernameResult) && usernameResult.length > 0 
+                ? usernameResult[0] 
+                : usernameResult;
+              const username = usernameData && !usernameData.error && usernameData.username
+                ? usernameData.username
+                : friendItem.friend;
+              return {
+                ...friendItem,
+                friendName: username,
+              };
+            } catch (error) {
+              console.error(`[Profile] Error loading username for friend ${friendItem.friend}:`, error);
+              return {
+                ...friendItem,
+                friendName: friendItem.friend,
+              };
+            }
+          })
+        );
+
+        friends.value = friendsWithNames;
+      } catch (error) {
+        console.error("[Profile] Error loading friends:", error);
+        friendsError.value = error.message || "Failed to load friends";
+        friends.value = [];
+      } finally {
+        loadingFriends.value = false;
+      }
+    };
+
+    // Load friend requests
+    const loadFriendRequests = async () => {
+      loadingRequests.value = true;
+
+      try {
+        // Load incoming requests
+        const incomingResult = await friending.getIncomingRequests(userId);
+        if (incomingResult && !incomingResult.error) {
+          const incomingWithNames = await Promise.all(
+            (incomingResult || []).map(async (request) => {
+              try {
+                const usernameResult = await auth.getUsername(request.requester);
+                // API returns an array: [{ "username": "String" }]
+                const usernameData = Array.isArray(usernameResult) && usernameResult.length > 0 
+                  ? usernameResult[0] 
+                  : usernameResult;
+                const username = usernameData && !usernameData.error && usernameData.username
+                  ? usernameData.username
+                  : request.requester;
+                return {
+                  ...request,
+                  requesterName: username,
+                };
+              } catch (error) {
+                console.error(`[Profile] Error loading username for requester ${request.requester}:`, error);
+                return {
+                  ...request,
+                  requesterName: request.requester,
+                };
+              }
+            })
+          );
+          incomingRequests.value = incomingWithNames;
+        } else {
+          incomingRequests.value = [];
+        }
+
+        // Load outgoing requests
+        const outgoingResult = await friending.getOutgoingRequests(userId);
+        if (outgoingResult && !outgoingResult.error) {
+          const outgoingWithNames = await Promise.all(
+            (outgoingResult || []).map(async (request) => {
+              try {
+                const usernameResult = await auth.getUsername(request.target);
+                // API returns an array: [{ "username": "String" }]
+                const usernameData = Array.isArray(usernameResult) && usernameResult.length > 0 
+                  ? usernameResult[0] 
+                  : usernameResult;
+                const username = usernameData && !usernameData.error && usernameData.username
+                  ? usernameData.username
+                  : request.target;
+                return {
+                  ...request,
+                  targetName: username,
+                };
+              } catch (error) {
+                console.error(`[Profile] Error loading username for target ${request.target}:`, error);
+                return {
+                  ...request,
+                  targetName: request.target,
+                };
+              }
+            })
+          );
+          outgoingRequests.value = outgoingWithNames;
+        } else {
+          outgoingRequests.value = [];
+        }
+      } catch (error) {
+        console.error("[Profile] Error loading friend requests:", error);
+        incomingRequests.value = [];
+        outgoingRequests.value = [];
+      } finally {
+        loadingRequests.value = false;
+      }
+    };
+
+    // Search for user by username
+    const searchUser = async () => {
+      const searchQuery = friendSearchQuery.value.trim();
+      console.log("[Profile] Searching for user:", searchQuery);
+      
+      if (!searchQuery) {
+        userSearchError.value = "Please enter a username";
+        return;
+      }
+
+      searchingUser.value = true;
+      userSearchError.value = null;
+      searchedUser.value = null;
+
+      try {
+        console.log("[Profile] Calling getUserByUsername API with:", searchQuery);
+        const result = await auth.getUserByUsername(searchQuery);
+        console.log("[Profile] getUserByUsername API response:", result);
+        
+        if (result && result.error) {
+          console.log("[Profile] API returned error:", result.error);
+          userSearchError.value = result.error || "User not found";
+          searchedUser.value = null;
+          return;
+        }
+
+        // API returns an array: [{ "user": "User" }]
+        const userData = Array.isArray(result) && result.length > 0 ? result[0] : result;
+        const foundUserId = userData?.user;
+
+        if (foundUserId) {
+          console.log("[Profile] User found:", foundUserId);
+          
+          // Check if it's the current user
+          if (foundUserId === userId) {
+            console.log("[Profile] User tried to add themselves");
+            userSearchError.value = "You cannot add yourself as a friend";
+            searchedUser.value = null;
+            return;
+          }
+
+          // Check if already friends
+          const isFriend = friends.value.some(f => f.friend === foundUserId);
+          if (isFriend) {
+            console.log("[Profile] User is already a friend");
+            userSearchError.value = "You are already friends with this user";
+            searchedUser.value = null;
+            return;
+          }
+
+          // Check if there's a pending request
+          const hasIncomingRequest = incomingRequests.value.some(r => r.requester === foundUserId);
+          const hasOutgoingRequest = outgoingRequests.value.some(r => r.target === foundUserId);
+          if (hasIncomingRequest || hasOutgoingRequest) {
+            console.log("[Profile] Pending request exists");
+            userSearchError.value = "There is already a pending friend request";
+            searchedUser.value = null;
+            return;
+          }
+
+          console.log("[Profile] User is valid, setting searchedUser");
+          searchedUser.value = {
+            user: foundUserId,
+            username: searchQuery,
+          };
+        } else {
+          console.log("[Profile] User not found in result. Result structure:", result);
+          userSearchError.value = "User not found";
+          searchedUser.value = null;
+        }
+      } catch (error) {
+        console.error("[Profile] Error searching user:", error);
+        userSearchError.value = error.message || "Failed to search user";
+        searchedUser.value = null;
+      } finally {
+        searchingUser.value = false;
+        console.log("[Profile] Search completed");
+      }
+    };
+
+    // Send friend request
+    const handleSendFriendRequest = async () => {
+      if (!searchedUser.value) {
+        await searchUser();
+        return;
+      }
+
+      sendingRequest.value = true;
+      userSearchError.value = null;
+
+      try {
+        const result = await friending.sendFriendRequest(userId, searchedUser.value.user);
+        
+        if (result && result.error) {
+          userSearchError.value = result.error || "Failed to send friend request";
+          return;
+        }
+
+        showToastNotification("Friend request sent!");
+        showAddFriendModal.value = false;
+        friendSearchQuery.value = "";
+        searchedUser.value = null;
+        
+        // Reload requests
+        await loadFriendRequests();
+      } catch (error) {
+        console.error("[Profile] Error sending friend request:", error);
+        userSearchError.value = error.message || "Failed to send friend request";
+      } finally {
+        sendingRequest.value = false;
+      }
+    };
+
+    // Accept friend request
+    const handleAcceptRequest = async (request) => {
+      processingRequest.value = true;
+
+      try {
+        const result = await friending.acceptFriendRequest(request.requester, userId);
+        
+        if (result && result.error) {
+          showToastNotification(result.error || "Failed to accept friend request");
+          return;
+        }
+
+        showToastNotification("Friend request accepted!");
+        
+        // Reload friends and requests
+        await Promise.all([loadFriends(), loadFriendRequests()]);
+      } catch (error) {
+        console.error("[Profile] Error accepting friend request:", error);
+        showToastNotification(error.message || "Failed to accept friend request");
+      } finally {
+        processingRequest.value = false;
+      }
+    };
+
+    // Decline friend request
+    const handleDeclineRequest = async (request) => {
+      processingRequest.value = true;
+
+      try {
+        const result = await friending.removeFriendRequest(request.requester, userId);
+        
+        if (result && result.error) {
+          showToastNotification(result.error || "Failed to decline friend request");
+          return;
+        }
+
+        showToastNotification("Friend request declined");
+        
+        // Reload requests
+        await loadFriendRequests();
+      } catch (error) {
+        console.error("[Profile] Error declining friend request:", error);
+        showToastNotification(error.message || "Failed to decline friend request");
+      } finally {
+        processingRequest.value = false;
+      }
+    };
+
+    // Cancel outgoing friend request
+    const handleCancelRequest = async (request) => {
+      processingRequest.value = true;
+
+      try {
+        const result = await friending.removeFriendRequest(userId, request.target);
+        
+        if (result && result.error) {
+          showToastNotification(result.error || "Failed to cancel friend request");
+          return;
+        }
+
+        showToastNotification("Friend request cancelled");
+        
+        // Reload requests
+        await loadFriendRequests();
+      } catch (error) {
+        console.error("[Profile] Error cancelling friend request:", error);
+        showToastNotification(error.message || "Failed to cancel friend request");
+      } finally {
+        processingRequest.value = false;
+      }
+    };
+
+    // Remove friend
+    const handleRemoveFriend = async (friend) => {
+      if (!confirm(`Are you sure you want to remove ${friend.friendName || friend.friend} as a friend?`)) {
+        return;
+      }
+
+      processingRequest.value = true;
+
+      try {
+        const result = await friending.removeFriend(userId, friend.friend);
+        
+        if (result && result.error) {
+          showToastNotification(result.error || "Failed to remove friend");
+          return;
+        }
+
+        showToastNotification("Friend removed");
+        
+        // Reload friends
+        await loadFriends();
+      } catch (error) {
+        console.error("[Profile] Error removing friend:", error);
+        showToastNotification(error.message || "Failed to remove friend");
+      } finally {
+        processingRequest.value = false;
+      }
+    };
+
+    // Navigate to review page from review item
+    const navigateToReview = (reviewItem) => {
+      const uri = reviewItem.songUri || reviewItem.uri;
+      if (!uri) {
+        console.error("Review missing song URI:", reviewItem);
+        return;
+      }
+
+      const encodedUri = encodeURIComponent(uri);
+      router.push(`/review/${encodedUri}`);
+    };
+
+    // Navigate to review page from playlist item
+    const navigateToReviewFromItem = (item) => {
+      if (!item.uri) {
+        console.error("Item missing URI:", item);
+        return;
+      }
+
+      const encodedUri = encodeURIComponent(item.uri);
+      router.push(`/review/${encodedUri}`);
+    };
+
+    // Delete review
+    const handleDeleteReview = async (reviewItem) => {
+      if (!reviewItem.review) {
+        console.error("Review missing review ID:", reviewItem);
+        showToastNotification("Error: Review ID not found");
+        return;
+      }
+
+      // Confirm deletion
+      if (!confirm("Are you sure you want to delete this review?")) {
+        return;
+      }
+
+      try {
+        const result = await review.deleteReview(reviewItem.review);
+        
+        if (result && result.error) {
+          showToastNotification(result.error || "Failed to delete review");
+          return;
+        }
+
+        showToastNotification("Review deleted successfully");
+        
+        // Remove the review from the list
+        reviews.value = reviews.value.filter(r => r.review !== reviewItem.review);
+      } catch (error) {
+        console.error("[Profile] Error deleting review:", error);
+        showToastNotification(error.message || "Failed to delete review");
+      }
+    };
+
+    // Watch for playlist updates from other components
+    watch(
+      () => playlistUpdateEvent.value,
+      (update) => {
+        if (update) {
+          // Refresh the playlist that was updated
+          if (update.playlistName === "Favorites") {
+            loadFavorites();
+          } else if (update.playlistName === "Listen Later") {
+            loadListenLater();
+          }
+        }
+      }
+    );
+
+    // Reset search state when modal closes
+    watch(
+      () => showAddFriendModal.value,
+      (isOpen) => {
+        if (!isOpen) {
+          friendSearchQuery.value = "";
+          searchedUser.value = null;
+          userSearchError.value = null;
+        }
+      }
+    );
+
+    // Load all data on mount
+    onMounted(async () => {
+      await Promise.all([
+        loadUsername(),
+        loadReviews(),
+        loadFavorites(),
+        loadListenLater(),
+        loadFriends(),
+        loadFriendRequests(),
+      ]);
+    });
+
+    return {
+      username,
+      reviews,
+      favoritesItems,
+      listenLaterItems,
+      friends,
+      incomingRequests,
+      outgoingRequests,
+      loadingReviews,
+      loadingFavorites,
+      loadingListenLater,
+      loadingFriends,
+      loadingRequests,
+      reviewsError,
+      favoritesError,
+      listenLaterError,
+      friendsError,
+      showAddFriendModal,
+      friendSearchQuery,
+      searchedUser,
+      searchingUser,
+      sendingRequest,
+      userSearchError,
+      processingRequest,
+      navigateToReview,
+      navigateToReviewFromItem,
+      handleDeleteReview,
+      removeFromPlaylist,
+      searchUser,
+      handleSendFriendRequest,
+      handleAcceptRequest,
+      handleDeclineRequest,
+      handleCancelRequest,
+      handleRemoveFriend,
+    };
+  },
+};
+</script>
+
+<style scoped>
+.page {
+  width: 100%;
+  min-height: calc(100vh - 80px);
+  padding: 2rem;
+}
+
+.profile-container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* Profile Header */
+.profile-header {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  padding: 2rem;
+  background: rgba(26, 35, 52, 0.6);
+  border: 1px solid rgba(123, 140, 168, 0.2);
+  border-radius: 8px;
+  margin-bottom: 2rem;
+  backdrop-filter: blur(10px);
+}
+
+.user-avatar {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background: rgba(74, 158, 255, 0.2);
+  border: 2px solid rgba(74, 158, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar-icon {
+  font-size: 3rem;
+}
+
+.user-info {
+  flex: 1;
+}
+
+.username {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 1rem;
+}
+
+.user-stats {
+  display: flex;
+  gap: 2rem;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #4a9eff;
+}
+
+.stat-label {
+  font-size: 0.9rem;
+  color: #7b8ca8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Profile Content */
+.profile-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+/* Playlists Grid */
+.playlists-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+}
+
+.playlist-section {
+  min-height: 200px;
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.profile-section {
+  background: rgba(26, 35, 52, 0.6);
+  border: 1px solid rgba(123, 140, 168, 0.2);
+  border-radius: 8px;
+  padding: 1.5rem;
+  backdrop-filter: blur(10px);
+}
+
+.section-title {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 1.5rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.loading-text,
+.error-text,
+.empty-message {
+  padding: 1rem;
+  text-align: center;
+  color: #7b8ca8;
+}
+
+.error-text {
+  color: #ff6b6b;
+}
+
+/* Reviews List */
+.reviews-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.review-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  background: rgba(10, 14, 26, 0.6);
+  border: 1px solid rgba(123, 140, 168, 0.1);
+  border-radius: 6px;
+  padding: 1rem;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.review-item:hover {
+  background: rgba(10, 14, 26, 0.8);
+  border-color: rgba(74, 158, 255, 0.3);
+}
+
+.review-item-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  cursor: pointer;
+}
+
+.delete-review-btn {
+  background: transparent;
+  border: none;
+  color: #7b8ca8;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  line-height: 1;
+  transition: color 0.2s ease;
+  flex-shrink: 0;
+  align-self: flex-start;
+}
+
+.delete-review-btn:hover {
+  color: #ff6b6b;
+}
+
+.review-song-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.review-song-name {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.review-song-artist {
+  font-size: 0.9rem;
+  color: #7b8ca8;
+}
+
+.review-rating {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.star {
+  color: #4a5568;
+  font-size: 1.2rem;
+}
+
+.star.filled {
+  color: #ffd700;
+}
+
+.review-text {
+  color: #7b8ca8;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* Song List (for playlists) */
+.song-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.song-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: rgba(10, 14, 26, 0.6);
+  border: 1px solid rgba(123, 140, 168, 0.1);
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.song-item:hover {
+  background: rgba(10, 14, 26, 0.8);
+  border-color: rgba(74, 158, 255, 0.3);
+}
+
+.song-item-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.song-thumbnail {
+  width: 50px;
+  height: 50px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.song-thumbnail-placeholder {
+  width: 50px;
+  height: 50px;
+  border-radius: 4px;
+  background: rgba(74, 158, 255, 0.2);
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  color: #4a9eff;
+  flex-shrink: 0;
+}
+
+.song-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.song-name {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.song-artist {
+  font-size: 0.85rem;
+  color: #7b8ca8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.remove-btn {
+  background: transparent;
+  border: none;
+  color: #7b8ca8;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  line-height: 1;
+  transition: color 0.2s ease;
+  flex-shrink: 0;
+}
+
+.remove-btn:hover {
+  color: #ff6b6b;
+}
+
+/* Friends Section */
+.friends-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.add-friend-btn {
+  padding: 0.5rem 1rem;
+  background: rgba(74, 158, 255, 0.2);
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  border-radius: 4px;
+  color: #4a9eff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.add-friend-btn:hover {
+  background: rgba(74, 158, 255, 0.3);
+  border-color: rgba(74, 158, 255, 0.5);
+}
+
+.friend-requests-section {
+  margin-bottom: 2rem;
+}
+
+.subsection-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #7b8ca8;
+  margin-bottom: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Friends List */
+.friends-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.friend-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: rgba(10, 14, 26, 0.6);
+  border: 1px solid rgba(123, 140, 168, 0.1);
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.friend-item:hover {
+  background: rgba(10, 14, 26, 0.8);
+  border-color: rgba(74, 158, 255, 0.3);
+}
+
+.friend-request-item {
+  border-color: rgba(255, 193, 7, 0.2);
+}
+
+.friend-avatar {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: rgba(74, 158, 255, 0.2);
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.friend-icon {
+  font-size: 1.5rem;
+}
+
+.friend-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.friend-name {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.friend-username {
+  font-size: 0.85rem;
+  color: #7b8ca8;
+}
+
+.friend-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.accept-btn,
+.decline-btn,
+.cancel-btn,
+.remove-friend-btn {
+  padding: 0.5rem 0.75rem;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.accept-btn {
+  background: rgba(76, 175, 80, 0.2);
+  border: 1px solid rgba(76, 175, 80, 0.3);
+  color: #4caf50;
+}
+
+.accept-btn:hover:not(:disabled) {
+  background: rgba(76, 175, 80, 0.3);
+  border-color: rgba(76, 175, 80, 0.5);
+}
+
+.decline-btn,
+.remove-friend-btn {
+  background: transparent;
+  border: 1px solid rgba(123, 140, 168, 0.3);
+  color: #7b8ca8;
+  font-size: 1.2rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.decline-btn:hover:not(:disabled),
+.remove-friend-btn:hover:not(:disabled) {
+  color: #ff6b6b;
+  border-color: rgba(255, 107, 107, 0.3);
+}
+
+.cancel-btn {
+  background: rgba(255, 152, 0, 0.2);
+  border: 1px solid rgba(255, 152, 0, 0.3);
+  color: #ff9800;
+}
+
+.cancel-btn:hover:not(:disabled) {
+  background: rgba(255, 152, 0, 0.3);
+  border-color: rgba(255, 152, 0, 0.5);
+}
+
+.accept-btn:disabled,
+.decline-btn:disabled,
+.cancel-btn:disabled,
+.remove-friend-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+
+.modal-content {
+  background: rgba(26, 35, 52, 0.95);
+  border: 1px solid rgba(123, 140, 168, 0.3);
+  border-radius: 8px;
+  padding: 0;
+  max-width: 500px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  backdrop-filter: blur(10px);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  border-bottom: 1px solid rgba(123, 140, 168, 0.2);
+}
+
+.modal-header h3 {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0;
+}
+
+.modal-close {
+  background: transparent;
+  border: none;
+  color: #7b8ca8;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease;
+}
+
+.modal-close:hover {
+  color: #ffffff;
+}
+
+.modal-body {
+  padding: 1.5rem;
+}
+
+.friend-search-input {
+  width: 100%;
+  padding: 0.75rem;
+  background: rgba(10, 14, 26, 0.6);
+  border: 1px solid rgba(123, 140, 168, 0.2);
+  border-radius: 4px;
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 1rem;
+  margin-bottom: 1rem;
+}
+
+.friend-search-input:focus {
+  outline: none;
+  border-color: #4a9eff;
+}
+
+.friend-search-input::placeholder {
+  color: #4a5568;
+}
+
+.searched-user {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  background: rgba(10, 14, 26, 0.6);
+  border: 1px solid rgba(123, 140, 168, 0.2);
+  border-radius: 6px;
+  margin-top: 1rem;
+}
+
+.searched-user-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex: 1;
+}
+
+.send-request-btn {
+  padding: 0.5rem 1rem;
+  background: rgba(74, 158, 255, 0.2);
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  border-radius: 4px;
+  color: #4a9eff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.send-request-btn:hover:not(:disabled) {
+  background: rgba(74, 158, 255, 0.3);
+  border-color: rgba(74, 158, 255, 0.5);
+}
+
+.send-request-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 968px) {
+  .playlists-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .page {
+    padding: 1rem;
+  }
+
+  .profile-header {
+    flex-direction: column;
+    text-align: center;
+    padding: 1.5rem;
+  }
+
+  .user-stats {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+}
+</style>
+

@@ -1,4 +1,7 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+// In development, use relative URLs (proxied by Vite)
+// In production, use the environment variable or default to the production API
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 
+  (import.meta.env.DEV ? '' : 'http://localhost:8000');
 
 // Helper function to make API calls
 async function apiCall(endpoint, body = {}) {

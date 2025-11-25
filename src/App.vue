@@ -127,8 +127,7 @@ export default {
     const searchTimeout = ref(null);
     const addingToPlaylist = ref({});
 
-    // TODO: Get from session/auth when implemented
-    const userId = "user1";
+    const userId = localStorage.getItem('currentUser');
 
     // Use composables
     const { addItemToPlaylist } = usePlaylists(userId);

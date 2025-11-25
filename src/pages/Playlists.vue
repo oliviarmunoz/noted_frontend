@@ -110,8 +110,7 @@ export default {
   setup() {
     const router = useRouter();
     
-    // TODO: Get from session/auth when implemented
-    const userId = "user1";
+    const userId = localStorage.getItem('currentUser');
 
     const favoritesItems = ref([]);
     const listenLaterItems = ref([]);

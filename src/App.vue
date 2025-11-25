@@ -1,7 +1,7 @@
 <template>
   <div id="app">
     <!-- Navigation -->
-    <nav class="navbar">
+    <nav v-if="isAuthenticated()" class="navbar">
       <div class="nav-container">
         <router-link to="/" class="logo">
           <span class="caps">NOTED</span>
@@ -82,6 +82,9 @@
           <router-link to="/profile" class="icon-btn">
             <span class="icon">👤</span>
           </router-link>
+          <button class="icon-btn" @click="handleLogout" title="Logout">
+            <span class="icon">🚪</span>
+          </button>
         </div>
       </div>
     </nav>
@@ -106,6 +109,7 @@ import { musicDiscovery } from "./api/api.js";
 import { usePlaylists } from "./composables/usePlaylists.js";
 import { useToast } from "./composables/useToast.js";
 import { usePlaylistEvents } from "./composables/usePlaylistEvents.js";
+import { useAuth } from "./composables/useAuth.js";
 
 export default {
   name: "App",
@@ -126,6 +130,7 @@ export default {
     const { addItemToPlaylist } = usePlaylists(userId);
     const { toastMessage, showToast, showToastNotification } = useToast();
     const { triggerPlaylistUpdate } = usePlaylistEvents();
+    const { logout, isAuthenticated } = useAuth();
 
     const performSearch = async (query) => {
       if (!query || query.trim().length === 0) {
@@ -273,6 +278,10 @@ export default {
       }
     };
 
+    const handleLogout = () => {
+      logout();
+    };
+
     // Cleanup timeout on unmount
     onUnmounted(() => {
       if (searchTimeout.value) {
@@ -294,6 +303,8 @@ export default {
       handleSearchBlur,
       addToPlaylist,
       showToastNotification,
+      handleLogout,
+      isAuthenticated,
     };
   },
 };

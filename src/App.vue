@@ -6,13 +6,51 @@
         <router-link to="/" class="logo">
           <span class="caps">NOTED</span>
         </router-link>
-        <div class="nav-search">
+        <div class="nav-search" ref="searchContainer">
           <input
             type="text"
             placeholder="Search song, album, people"
             class="search-input"
+            v-model="searchQuery"
+            @input="handleSearchInput"
+            @focus="showResults = true"
+            @blur="handleSearchBlur"
           />
           <span class="search-icon">🔍</span>
+          <div v-if="showResults && searchResults.length > 0" class="search-results">
+            <div
+              v-for="result in searchResults"
+              :key="result._id || result.uri"
+              class="search-result-item"
+              @mousedown="selectResult(result)"
+            >
+              <img
+                v-if="result.imageUrl"
+                :src="result.imageUrl"
+                :alt="result.name"
+                class="result-image"
+              />
+              <div v-else class="result-image-placeholder">
+                {{ result.name?.charAt(0) || "?" }}
+              </div>
+              <div class="result-info">
+                <div class="result-name">{{ result.name }}</div>
+                <div class="result-artist" v-if="result.artistName">
+                  {{ result.artistName }}
+                </div>
+                <div class="result-type">{{ result.type || "track" }}</div>
+              </div>
+            </div>
+          </div>
+          <div
+            v-if="showResults && searchQuery && searchResults.length === 0 && !isSearching"
+            class="search-results"
+          >
+            <div class="search-no-results">No results found</div>
+          </div>
+          <div v-if="isSearching && showResults" class="search-results">
+            <div class="search-loading">Searching...</div>
+          </div>
         </div>
         <div class="nav-actions">
           <button class="icon-btn">
@@ -32,8 +70,115 @@
 </template>
 
 <script>
+import { ref, onMounted, onUnmounted } from "vue";
+import { useRouter } from "vue-router";
+import { musicDiscovery } from "./api/api.js";
+
 export default {
   name: "App",
+  setup() {
+    const router = useRouter();
+    const searchQuery = ref("");
+    const searchResults = ref([]);
+    const showResults = ref(false);
+    const isSearching = ref(false);
+    const searchContainer = ref(null);
+    const searchTimeout = ref(null);
+
+    // TODO: Get from session/auth when implemented
+    const userId = "user1";
+
+    const performSearch = async (query) => {
+      if (!query || query.trim().length === 0) {
+        searchResults.value = [];
+        return;
+      }
+
+      isSearching.value = true;
+      try {
+        const response = await musicDiscovery.search(userId, query.trim());
+        
+        if (response && response.error) {
+          console.error("Search error:", response.error);
+          searchResults.value = [];
+          return;
+        }
+
+        // Filter to only show tracks (songs) for now
+        // You can modify this to show albums/artists too
+        searchResults.value = (response?.musicEntities || []).filter(
+          (entity) => entity.type === "track" || !entity.type
+        );
+      } catch (error) {
+        console.error("Error performing search:", error);
+        searchResults.value = [];
+      } finally {
+        isSearching.value = false;
+      }
+    };
+
+    const handleSearchInput = () => {
+      // Clear existing timeout
+      if (searchTimeout.value) {
+        clearTimeout(searchTimeout.value);
+      }
+
+      // Debounce search - wait 300ms after user stops typing
+      searchTimeout.value = setTimeout(() => {
+        performSearch(searchQuery.value);
+      }, 300);
+    };
+
+    const selectResult = (result) => {
+      if (!result.uri) {
+        console.error("Result missing URI:", result);
+        return;
+      }
+
+      // Use the full URI (e.g., "spotify:track:xxxxx")
+      // URL-encode it for the route to handle colons
+      const encodedUri = encodeURIComponent(result.uri);
+
+      // Navigate to review page
+      router.push(`/review/${encodedUri}`);
+      
+      // Clear search
+      searchQuery.value = "";
+      searchResults.value = [];
+      showResults.value = false;
+    };
+
+    const handleSearchBlur = (event) => {
+      // Delay hiding results to allow click events to fire
+      setTimeout(() => {
+        // Check if focus moved to search results
+        if (
+          searchContainer.value &&
+          !searchContainer.value.contains(document.activeElement)
+        ) {
+          showResults.value = false;
+        }
+      }, 200);
+    };
+
+    // Cleanup timeout on unmount
+    onUnmounted(() => {
+      if (searchTimeout.value) {
+        clearTimeout(searchTimeout.value);
+      }
+    });
+
+    return {
+      searchQuery,
+      searchResults,
+      showResults,
+      isSearching,
+      searchContainer,
+      handleSearchInput,
+      selectResult,
+      handleSearchBlur,
+    };
+  },
 };
 </script>
 
@@ -113,6 +258,7 @@ export default {
   position: relative;
   display: flex;
   align-items: center;
+  z-index: 200;
 }
 
 .search-input {
@@ -142,6 +288,102 @@ export default {
   right: 1rem;
   color: #7b8ca8;
   font-size: 1rem;
+  pointer-events: none;
+}
+
+.search-results {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 0;
+  right: 0;
+  background: rgba(26, 35, 52, 0.95);
+  border: 1px solid rgba(123, 140, 168, 0.3);
+  border-radius: 8px;
+  max-height: 400px;
+  overflow-y: auto;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(10px);
+  z-index: 1000;
+}
+
+.search-result-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  border-bottom: 1px solid rgba(123, 140, 168, 0.1);
+}
+
+.search-result-item:last-child {
+  border-bottom: none;
+}
+
+.search-result-item:hover {
+  background: rgba(74, 158, 255, 0.1);
+}
+
+.result-image {
+  width: 50px;
+  height: 50px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.result-image-placeholder {
+  width: 50px;
+  height: 50px;
+  border-radius: 4px;
+  background: rgba(74, 158, 255, 0.1);
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  font-weight: 900;
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.result-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.result-name {
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin-bottom: 0.25rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.result-artist {
+  color: #7b8ca8;
+  font-size: 0.85rem;
+  margin-bottom: 0.25rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.result-type {
+  color: #4a5568;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.search-no-results,
+.search-loading {
+  padding: 1.5rem;
+  text-align: center;
+  color: #7b8ca8;
+  font-size: 0.9rem;
 }
 
 .nav-actions {

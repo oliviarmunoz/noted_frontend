@@ -1275,18 +1275,19 @@
 
 ### POST /api/MusicDiscovery/search
 
-**Description:** Performs a search for music entities based on a query string.
+**Description:** Performs a search against the external music service (Spotify), updates the user's search history, and returns the matching music entities.
 
 **Requirements:**
-
-- `user` exists
+- `query` is not empty.
 
 **Effects:**
-
-- performs a search for music entities matching `query` and stores results for `user`
+- Updates `lastQuery` of the user.
+- Removes all existing `SearchResults` for the user.
+- Fetches data from the external service.
+- Creates or updates `MusicEntities` based on results.
+- Creates `SearchResults` linking the user to the new entities.
 
 **Request Body:**
-
 ```json
 {
   "user": "string",
@@ -1295,13 +1296,26 @@
 ```
 
 **Success Response Body (Action):**
-
 ```json
-{}
+{
+  "musicEntities": [
+    {
+      "_id": "string",
+      "externalId": "string",
+      "type": "string", 
+      "name": "string",
+      "uri": "string",
+      "imageUrl": "string",
+      "description": "string",
+      "releaseDate": "string",
+      "durationMs": "number",
+      "artistName": "string"
+    }
+  ]
+}
 ```
 
 **Error Response Body:**
-
 ```json
 {
   "error": "string"
@@ -1312,18 +1326,15 @@
 
 ### POST /api/MusicDiscovery/clearSearch
 
-**Description:** Clears the search results for a user.
+**Description:** Clears the search results associated with a specific user.
 
 **Requirements:**
-
-- `user` exists
+- None specified (User must exist).
 
 **Effects:**
-
-- clears stored search results for `user`
+- Removes all `SearchResults` where the owner is the user.
 
 **Request Body:**
-
 ```json
 {
   "user": "string"
@@ -1331,13 +1342,11 @@
 ```
 
 **Success Response Body (Action):**
-
 ```json
 {}
 ```
 
 **Error Response Body:**
-
 ```json
 {
   "error": "string"
@@ -1346,20 +1355,64 @@
 
 ---
 
-### POST /api/MusicDiscovery/\_getSearchResults
+### POST /api/MusicDiscovery/loadEntityDetails
 
-**Description:** Returns the search results for a user.
+**Description:** Fetches and updates detailed information for a specific music entity from the external service.
 
 **Requirements:**
-
-- `user` exists
+- `externalId` is valid.
 
 **Effects:**
-
-- returns the stored search results for `user`
+- Fetches detailed info from external service.
+- Updates the specific `MusicEntity` with richer data (dates, popularity, etc.).
+- Returns the corresponding `MusicEntity`.
 
 **Request Body:**
+```json
+{
+  "externalId": "string",
+  "type": "string"
+}
+```
 
+**Success Response Body (Action):**
+```json
+{
+  "music": {
+    "_id": "string",
+    "externalId": "string",
+    "type": "string",
+    "name": "string",
+    "uri": "string",
+    "imageUrl": "string",
+    "description": "string",
+    "releaseDate": "string",
+    "durationMs": "number",
+    "artistName": "string"
+  }
+}
+```
+
+**Error Response Body:**
+```json
+{
+  "error": "string"
+}
+```
+
+---
+
+### POST /api/MusicDiscovery/_getSearchResults
+
+**Description:** Retrieves the music entities currently associated with the user's last search results.
+
+**Requirements:**
+- None specified.
+
+**Effects:**
+- Returns the music entities tied to the search results that correspond to the given user.
+
+**Request Body:**
 ```json
 {
   "user": "string"
@@ -1367,19 +1420,26 @@
 ```
 
 **Success Response Body (Query):**
-
 ```json
 [
   {
-    "entity": "string",
-    "name": "string",
-    "type": "string"
+    "musicEntity": {
+      "_id": "string",
+      "externalId": "string",
+      "type": "string",
+      "name": "string",
+      "uri": "string",
+      "imageUrl": "string",
+      "description": "string",
+      "releaseDate": "string",
+      "durationMs": "number",
+      "artistName": "string"
+    }
   }
 ]
 ```
 
 **Error Response Body:**
-
 ```json
 {
   "error": "string"
@@ -1388,20 +1448,17 @@
 
 ---
 
-### POST /api/MusicDiscovery/\_getEntityFromId
+### POST /api/MusicDiscovery/_getEntityFromId
 
-**Description:** Returns entity information from an external ID.
+**Description:** Retrieves a specific music entity by its external service ID.
 
 **Requirements:**
-
-- `externalId` exists
+- None specified.
 
 **Effects:**
-
-- returns entity information for the entity with `externalId`
+- Returns the music entity with the given external id.
 
 **Request Body:**
-
 ```json
 {
   "externalId": "string"
@@ -1409,20 +1466,26 @@
 ```
 
 **Success Response Body (Query):**
-
 ```json
 [
   {
-    "entity": "string",
-    "name": "string",
-    "type": "string",
-    "uri": "string"
+    "musicEntity": {
+      "_id": "string",
+      "externalId": "string",
+      "type": "string",
+      "name": "string",
+      "uri": "string",
+      "imageUrl": "string",
+      "description": "string",
+      "releaseDate": "string",
+      "durationMs": "number",
+      "artistName": "string"
+    }
   }
 ]
 ```
 
 **Error Response Body:**
-
 ```json
 {
   "error": "string"
@@ -1431,20 +1494,17 @@
 
 ---
 
-### POST /api/MusicDiscovery/\_getEntityFromUri
+### POST /api/MusicDiscovery/_getEntityFromUri
 
-**Description:** Returns entity information from a URI.
+**Description:** Retrieves a specific music entity by its URI.
 
 **Requirements:**
-
-- `uri` exists
+- None specified.
 
 **Effects:**
-
-- returns entity information for the entity with `uri`
+- Returns the music entity with the given external uri.
 
 **Request Body:**
-
 ```json
 {
   "uri": "string"
@@ -1452,20 +1512,26 @@
 ```
 
 **Success Response Body (Query):**
-
 ```json
 [
   {
-    "entity": "string",
-    "name": "string",
-    "type": "string",
-    "externalId": "string"
+    "musicEntity": {
+      "_id": "string",
+      "externalId": "string",
+      "type": "string",
+      "name": "string",
+      "uri": "string",
+      "imageUrl": "string",
+      "description": "string",
+      "releaseDate": "string",
+      "durationMs": "number",
+      "artistName": "string"
+    }
   }
 ]
 ```
 
 **Error Response Body:**
-
 ```json
 {
   "error": "string"

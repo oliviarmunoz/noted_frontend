@@ -3,11 +3,16 @@
     <div class="home-layout">
       <aside class="sidebar">
         <div class="sidebar-section">
-          <h2 class="sidebar-title clickable-title" @click="$router.push('/playlists')">
+          <h2
+            class="sidebar-title clickable-title"
+            @click="$router.push('/playlists')"
+          >
             LISTEN LATER
           </h2>
           <div v-if="loadingListenLater" class="loading-text">Loading...</div>
-          <div v-else-if="listenLaterError" class="error-text">{{ listenLaterError }}</div>
+          <div v-else-if="listenLaterError" class="error-text">
+            {{ listenLaterError }}
+          </div>
           <ul v-else class="song-list">
             <li
               v-for="item in listenLaterItems"
@@ -44,11 +49,16 @@
         </div>
 
         <div class="sidebar-section">
-          <h2 class="sidebar-title clickable-title" @click="$router.push('/playlists')">
+          <h2
+            class="sidebar-title clickable-title"
+            @click="$router.push('/playlists')"
+          >
             FAVORITES
           </h2>
           <div v-if="loadingFavorites" class="loading-text">Loading...</div>
-          <div v-else-if="favoritesError" class="error-text">{{ favoritesError }}</div>
+          <div v-else-if="favoritesError" class="error-text">
+            {{ favoritesError }}
+          </div>
           <ul v-else class="song-list">
             <li
               v-for="item in favoritesItems"
@@ -131,19 +141,32 @@
 </template>
 
 <script>
-import { ref, onMounted, watch } from "vue";
+import { ref, onMounted, watch, computed } from "vue";
 import { useRouter } from "vue-router";
 import { usePlaylists } from "../composables/usePlaylists.js";
 import { useToast } from "../composables/useToast.js";
 import { usePlaylistEvents } from "../composables/usePlaylistEvents.js";
+import { useAuth } from "../composables/useAuth.js";
+import { friending, review, musicDiscovery, auth } from "../api/api.js";
 
 export default {
   name: "Home",
   setup() {
     const router = useRouter();
-    
-    // TODO: Get from session/auth when implemented
-    const userId = "user1";
+    const { currentUser } = useAuth();
+
+    // Get userId from authenticated user
+    const userId = ref(null);
+
+    // Update userId when currentUser changes
+    watch(
+      () => currentUser.value,
+      (user) => {
+        // currentUser might be the user object or just the user ID string
+        userId.value = user?._id || user || null;
+      },
+      { immediate: true }
+    );
 
     const favoritesItems = ref([]);
     const listenLaterItems = ref([]);
@@ -152,18 +175,29 @@ export default {
     const favoritesError = ref(null);
     const listenLaterError = ref(null);
 
-    // Use composables
-    const { loadPlaylistItems, removeItemFromPlaylist } = usePlaylists(userId);
+    // Wrapper functions for playlist operations that handle userId being null
+    const getPlaylistComposable = () => {
+      if (!userId.value) {
+        throw new Error("User not authenticated");
+      }
+      return usePlaylists(userId.value);
+    };
     const { showToastNotification } = useToast();
     const { playlistUpdateEvent } = usePlaylistEvents();
 
     // Load favorites
     const loadFavorites = async () => {
+      if (!userId.value) {
+        favoritesItems.value = [];
+        return;
+      }
+
       loadingFavorites.value = true;
       favoritesError.value = null;
 
       try {
-        const result = await loadPlaylistItems("Favorites");
+        const playlistComposable = getPlaylistComposable();
+        const result = await playlistComposable.loadPlaylistItems("Favorites");
         if (result.error) {
           favoritesError.value = result.error;
           favoritesItems.value = [];
@@ -181,11 +215,19 @@ export default {
 
     // Load listen later
     const loadListenLater = async () => {
+      if (!userId.value) {
+        listenLaterItems.value = [];
+        return;
+      }
+
       loadingListenLater.value = true;
       listenLaterError.value = null;
 
       try {
-        const result = await loadPlaylistItems("Listen Later");
+        const playlistComposable = getPlaylistComposable();
+        const result = await playlistComposable.loadPlaylistItems(
+          "Listen Later"
+        );
         if (result.error) {
           listenLaterError.value = result.error;
           listenLaterItems.value = [];
@@ -215,39 +257,52 @@ export default {
     // Navigate from activity feed (uses sample data with songId/uri)
     const navigateFromFeed = (review) => {
       const uri = review.songUri || review.uri;
-      
+
       // Check if we have a valid Spotify URI
       if (!uri || !uri.startsWith("spotify:")) {
         // If it's just a number (sample data), show a message
         if (review.songId && typeof review.songId === "number") {
-          showToastNotification("This is sample data. Click on real reviews to view songs.");
+          showToastNotification(
+            "This is sample data. Click on real reviews to view songs."
+          );
           return;
         }
         console.error("Feed item missing valid URI:", review);
         showToastNotification("Cannot navigate: Song URI not available");
         return;
       }
-      
+
       router.push(`/review/${encodeURIComponent(uri)}`);
     };
 
     // Remove item from playlist
     const removeFromPlaylist = async (item, playlistName) => {
+      if (!userId.value) {
+        showToastNotification("Error: User not authenticated");
+        return;
+      }
+
       if (!item.item) {
         showToastNotification("Error: Item ID not found");
         return;
       }
 
       try {
-        const result = await removeItemFromPlaylist(item.item, playlistName);
-        
+        const playlistComposable = getPlaylistComposable();
+        const result = await playlistComposable.removeItemFromPlaylist(
+          item.item,
+          playlistName
+        );
+
         if (!result.success) {
-          showToastNotification(result.error || `Error removing from ${playlistName}`);
+          showToastNotification(
+            result.error || `Error removing from ${playlistName}`
+          );
           return;
         }
 
         showToastNotification(`Removed from ${playlistName}`);
-        
+
         // Reload the playlist
         if (playlistName === "Favorites") {
           await loadFavorites();
@@ -281,6 +336,9 @@ export default {
       loadListenLater();
     });
 
+    // Expose userId for use in methods (Options API)
+    const getUserId = () => userId.value;
+
     return {
       favoritesItems,
       listenLaterItems,
@@ -291,6 +349,7 @@ export default {
       navigateToReview,
       navigateFromFeed,
       removeFromPlaylist,
+      getUserId,
     };
   },
   data() {
@@ -309,8 +368,14 @@ export default {
       this.error = null;
 
       try {
-        // TODO: Replace with actual current user later
-        const currentUser = "user1";
+        // Get authenticated user ID from setup
+        const currentUser = this.getUserId();
+
+        if (!currentUser) {
+          this.error = "User not authenticated";
+          this.loading = false;
+          return;
+        }
 
         // Get friends of the current user
         const friendsResponse = await friending.getFriends(currentUser);
@@ -344,6 +409,7 @@ export default {
               try {
                 const target = reviewData.target;
                 let entityInfo = null;
+                let musicEntity = null;
 
                 // Try to get entity details from the target
                 if (target) {
@@ -358,6 +424,12 @@ export default {
                       entityResponse.length > 0
                     ) {
                       entityInfo = entityResponse[0];
+                      // Extract musicEntity from the response (same pattern as Review.vue)
+                      if (entityInfo.musicEntity) {
+                        musicEntity = entityInfo.musicEntity;
+                      } else {
+                        musicEntity = entityInfo;
+                      }
                     }
                   } catch (e) {
                     // If that fails, try as URI
@@ -370,6 +442,24 @@ export default {
                         entityResponse.length > 0
                       ) {
                         entityInfo = entityResponse[0];
+                        // Extract musicEntity from the response (same pattern as Review.vue)
+                        if (entityInfo.musicEntity) {
+                          musicEntity = entityInfo.musicEntity;
+                        } else {
+                          musicEntity = entityInfo;
+                        }
+                      } else if (
+                        entityResponse &&
+                        !entityResponse.error &&
+                        !Array.isArray(entityResponse)
+                      ) {
+                        // Handle non-array response
+                        entityInfo = entityResponse;
+                        if (entityInfo.musicEntity) {
+                          musicEntity = entityInfo.musicEntity;
+                        } else {
+                          musicEntity = entityInfo;
+                        }
                       }
                     } catch (e2) {
                       console.warn(
@@ -394,19 +484,25 @@ export default {
                   );
                 }
 
+                // Extract URI from musicEntity if available
+                const songUri =
+                  musicEntity?.uri || musicEntity?.externalId || target;
+
                 allReviews.push({
                   id: reviewData.review,
                   reviewer: reviewerName,
-                  song: entityInfo?.name || "Unknown Song",
+                  song: musicEntity?.name || "Unknown Song",
                   artist:
-                    entityInfo?.artistName ||
-                    entityInfo?.artist ||
+                    musicEntity?.artistName ||
+                    musicEntity?.artist ||
                     "Unknown Artist",
                   rating: reviewData.rating || 0,
                   comment: reviewData.text || reviewData.notes || "",
                   songId: target,
+                  songUri: songUri,
+                  uri: songUri,
                   target: target,
-                  entityInfo: entityInfo,
+                  entityInfo: musicEntity,
                 });
               } catch (err) {
                 console.warn(

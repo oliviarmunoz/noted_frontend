@@ -26,7 +26,10 @@
             <div class="search-loading">Searching...</div>
           </div>
           <!-- Show results when not searching and we have results -->
-          <div v-else-if="showResults && searchResults.length > 0" class="search-results">
+          <div
+            v-else-if="showResults && searchResults.length > 0"
+            class="search-results"
+          >
             <div
               v-for="result in searchResults"
               :key="result._id || result.uri"
@@ -72,7 +75,12 @@
           </div>
           <!-- Show no results when not searching and no results -->
           <div
-            v-else-if="showResults && searchQuery && searchResults.length === 0 && !isSearching"
+            v-else-if="
+              showResults &&
+              searchQuery &&
+              searchResults.length === 0 &&
+              !isSearching
+            "
             class="search-results"
           >
             <div class="search-no-results">No results found</div>
@@ -86,7 +94,11 @@
           <router-link to="/profile" class="icon-btn">
             <span class="icon">👤</span>
           </router-link>
-          <button class="icon-btn logout-btn" @click="handleLogout" title="Logout">
+          <button
+            class="icon-btn logout-btn"
+            @click="handleLogout"
+            title="Logout"
+          >
             <span class="icon">Logout</span>
           </button>
         </div>
@@ -107,7 +119,7 @@
 </template>
 
 <script>
-import { ref, onUnmounted } from "vue";
+import { ref, onUnmounted, watch } from "vue";
 import { useRouter } from "vue-router";
 import { musicDiscovery } from "./api/api.js";
 import { usePlaylists } from "./composables/usePlaylists.js";
@@ -119,6 +131,7 @@ export default {
   name: "App",
   setup() {
     const router = useRouter();
+    const { currentUser } = useAuth();
     const searchQuery = ref("");
     const searchResults = ref([]);
     const showResults = ref(false);
@@ -127,11 +140,26 @@ export default {
     const searchTimeout = ref(null);
     const addingToPlaylist = ref({});
 
-    // TODO: Get from session/auth when implemented
-    const userId = "user1";
+    // Get userId from authenticated user
+    const userId = ref(null);
 
-    // Use composables
-    const { addItemToPlaylist } = usePlaylists(userId);
+    // Update userId when currentUser changes
+    watch(
+      () => currentUser.value,
+      (user) => {
+        // currentUser might be the user object or just the user ID string
+        userId.value = user?._id || user || null;
+      },
+      { immediate: true }
+    );
+
+    // Wrapper function for playlist operations that handle userId being null
+    const getPlaylistComposable = () => {
+      if (!userId.value) {
+        throw new Error("User not authenticated");
+      }
+      return usePlaylists(userId.value);
+    };
     const { toastMessage, showToast, showToastNotification } = useToast();
     const { triggerPlaylistUpdate } = usePlaylistEvents();
     const { logout, isAuthenticated } = useAuth();
@@ -146,10 +174,19 @@ export default {
       // Clear previous results when starting a new search to prevent overlap
       searchResults.value = [];
       isSearching.value = true;
-      
+
       try {
-        const response = await musicDiscovery.search(userId, query.trim());
-        
+        if (!userId.value) {
+          console.error("[App] Cannot search: User not authenticated");
+          searchResults.value = [];
+          return;
+        }
+
+        const response = await musicDiscovery.search(
+          userId.value,
+          query.trim()
+        );
+
         if (response && response.error) {
           console.error("Search error:", response.error);
           searchResults.value = [];
@@ -161,7 +198,7 @@ export default {
         const entities = (response?.musicEntities || []).filter(
           (entity) => entity.type === "track" || !entity.type
         );
-        
+
         // Debug: Log the structure of search results
         if (entities.length > 0) {
           console.log("[App] Search result structure:", {
@@ -172,7 +209,7 @@ export default {
             _id: entities[0]._id,
           });
         }
-        
+
         searchResults.value = entities;
       } catch (error) {
         console.error("Error performing search:", error);
@@ -206,7 +243,7 @@ export default {
 
       // Navigate to review page
       router.push(`/review/${encodedUri}`);
-      
+
       // Clear search
       searchQuery.value = "";
       searchResults.value = [];
@@ -228,6 +265,11 @@ export default {
 
     // Add item to playlist
     const addToPlaylist = async (result, playlistName) => {
+      if (!userId.value) {
+        showToastNotification("Error: User not authenticated");
+        return;
+      }
+
       if (!result._id && !result.externalId) {
         showToastNotification("Error: Song ID not found");
         return;
@@ -253,11 +295,16 @@ export default {
           name: result.name,
         });
 
-        const addResult = await addItemToPlaylist(itemId, playlistName);
+        const playlistComposable = getPlaylistComposable();
+        const addResult = await playlistComposable.addItemToPlaylist(
+          itemId,
+          playlistName
+        );
 
         if (!addResult.success) {
           // Format error message to show song name instead of ID
-          let errorMessage = addResult.error || `Error adding to ${playlistName}`;
+          let errorMessage =
+            addResult.error || `Error adding to ${playlistName}`;
           if (errorMessage.includes("already in playlist") && result.name) {
             // Replace the item ID with the song name in the error message
             // Handles formats like: Item 'ID' or Item "ID" or just the ID
@@ -271,7 +318,7 @@ export default {
         }
 
         showToastNotification(`Added to ${playlistName}!`);
-        
+
         // Trigger playlist update event so Home page can refresh
         triggerPlaylistUpdate(playlistName);
       } catch (error) {

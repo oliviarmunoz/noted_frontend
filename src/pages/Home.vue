@@ -4,7 +4,7 @@
       <!-- Sidebar -->
       <aside class="sidebar">
         <div class="sidebar-section">
-          <h2 class="sidebar-title">TO LISTEN</h2>
+          <h2 class="sidebar-title">Listen Later</h2>
           <ul class="song-list">
             <li class="song-item" v-for="i in 4" :key="i" @click="$router.push(`/song/${i}`)" style="cursor: pointer;">
               <input type="checkbox" class="checkbox" @click.stop />
@@ -17,7 +17,7 @@
         </div>
 
         <div class="sidebar-section">
-          <h2 class="sidebar-title">FAVORITES</h2>
+          <h2 class="sidebar-title">Favorites</h2>
           <ul class="song-list">
             <li class="song-item" v-for="i in 4" :key="i" @click="$router.push(`/song/${i + 10}`)" style="cursor: pointer;">
               <input type="checkbox" class="checkbox" @click.stop />
@@ -30,40 +30,50 @@
         </div>
       </aside>
 
-      <!-- Main Feed -->
       <main class="feed">
-        <div class="review-card" v-for="review in reviews" :key="review.id">
-          <div class="review-header">
-            <div class="user-icon">👤</div>
-            <div class="review-meta">
-              <span class="reviewer-name">{{ review.reviewer }} reviewed</span>
+        <div v-if="loading" class="loading">Loading reviews...</div>
+        <div v-else-if="error" class="error">{{ error }}</div>
+        <div v-else-if="reviews.length === 0" class="no-reviews">
+          No reviews yet. Visit a song page to add a review!
+        </div>
+        <div v-else>
+          <div class="review-card" v-for="review in reviews" :key="review.id">
+            <div class="review-header">
+              <div class="user-icon">👤</div>
+              <div class="review-meta">
+                <span class="reviewer-name"
+                  >User {{ review.user }} reviewed</span
+                >
+              </div>
             </div>
+<<<<<<< Updated upstream
           </div>
           <div class="song-details" @click="$router.push(`/song/${review.songId}`)" style="cursor: pointer;">
             <span class="play-icon">▶</span>
             <div class="song-text">
               <div class="song-title">{{ review.song }}</div>
               <div class="song-artist">{{ review.artist }}</div>
+=======
+            <div class="song-details">
+              <span class="play-icon">▶</span>
+              <div class="song-text">
+                <div class="song-title">Item {{ review.item }}</div>
+                <div class="song-artist">Song/Album</div>
+              </div>
+>>>>>>> Stashed changes
             </div>
-          </div>
-          <div class="rating">
-            <span
-              v-for="i in 5"
-              :key="i"
-              class="star"
-              :class="{ filled: i <= review.rating }"
-            >
-              ★
-            </span>
-          </div>
-          <p class="review-comment">{{ review.comment }}</p>
-          <div class="comment-input">
-            <span class="comment-icon">👤</span>
-            <input
-              type="text"
-              placeholder="Leave a comment"
-              class="comment-field"
-            />
+            <div class="rating">
+              <span
+                v-for="i in 5"
+                :key="i"
+                class="star"
+                :class="{ filled: i <= (review.rating || 0) }"
+              >
+                ★
+              </span>
+            </div>
+            <p v-if="review.notes" class="review-comment">{{ review.notes }}</p>
+            <!-- Comments are not supported in the current API specification -->
           </div>
         </div>
       </main>
@@ -72,10 +82,20 @@
 </template>
 
 <script>
+import { ref, onMounted } from "vue";
+import { auth, friending, playlist, review, session, musicDiscovery } from "../api/api.js";
+
 export default {
   name: "Home",
-  data() {
+  setup() {
+    const reviews = ref([]);
+    const loading = ref(true);
+    const error = ref(null);
+
+    // TODO: implement feed
+
     return {
+<<<<<<< Updated upstream
       reviews: [
         {
           id: 1,
@@ -96,6 +116,11 @@ export default {
           songId: 2,
         },
       ],
+=======
+      reviews,
+      loading,
+      error,
+>>>>>>> Stashed changes
     };
   },
 };
@@ -311,6 +336,57 @@ export default {
 
 .comment-field::placeholder {
   color: #4a5568;
+}
+
+.comment-submit-btn {
+  padding: 0.5rem 1rem;
+  background: rgba(74, 158, 255, 0.1);
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  border-radius: 4px;
+  color: #4a9eff;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.comment-submit-btn:hover {
+  background: rgba(74, 158, 255, 0.2);
+  border-color: #4a9eff;
+}
+
+.comments-section {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(123, 140, 168, 0.1);
+}
+
+.comment-item {
+  margin-bottom: 0.75rem;
+  padding: 0.75rem;
+  background: rgba(10, 14, 26, 0.6);
+  border-radius: 4px;
+}
+
+.comment-user {
+  color: #4a9eff;
+  font-weight: 600;
+  margin-right: 0.5rem;
+}
+
+.comment-text {
+  color: #7b8ca8;
+}
+
+.loading,
+.error,
+.no-reviews {
+  text-align: center;
+  padding: 4rem 2rem;
+  color: #7b8ca8;
+}
+
+.error {
+  color: #ff6b9d;
 }
 
 @media (max-width: 968px) {

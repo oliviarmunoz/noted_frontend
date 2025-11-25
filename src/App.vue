@@ -6,12 +6,6 @@
         <router-link to="/" class="logo">
           <span class="caps">NOTED</span>
         </router-link>
-        <div class="nav-links">
-          <router-link to="/" class="nav-link">Home</router-link>
-          <router-link to="/playlists" class="nav-link"
-            >My Playlists</router-link
-          >
-        </div>
         <div class="nav-search">
           <input
             type="text"
@@ -24,6 +18,7 @@
           <button class="icon-btn">
             <span class="icon">+</span>
           </button>
+          <!-- TODO: Add profile page -->
           <router-link to="/profile" class="icon-btn">
             <span class="icon">👤</span>
           </router-link>

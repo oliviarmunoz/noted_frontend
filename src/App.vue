@@ -6,6 +6,10 @@
         <router-link to="/" class="logo">
           <span class="caps">NOTED</span>
         </router-link>
+        <div class="nav-links">
+          <router-link to="/" class="nav-link">Home</router-link>
+          <router-link to="/playlists" class="nav-link">Playlists</router-link>
+        </div>
         <div class="nav-search" ref="searchContainer">
           <input
             type="text"

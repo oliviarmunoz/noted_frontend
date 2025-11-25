@@ -4,6 +4,7 @@ import Review from '../pages/Review.vue'
 import Login from '../pages/Login.vue'
 import Signup from '../pages/Signup.vue'
 import { useAuth } from '../composables/useAuth'
+import Playlists from '../pages/Playlists.vue'
 
 const routes = [
   {
@@ -28,6 +29,12 @@ const routes = [
     path: '/review/:id',
     name: 'Review',
     component: Review,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/playlists',
+    name: 'Playlists',
+    component: Playlists,
     meta: { requiresAuth: true }
   }
 ]

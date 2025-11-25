@@ -127,7 +127,7 @@ export default {
     const searchTimeout = ref(null);
     const addingToPlaylist = ref({});
 
-    const userId = localStorage.getItem('currentUser');
+    const userId = JSON.parse(localStorage.getItem('currentUser'));
 
     // Use composables
     const { addItemToPlaylist } = usePlaylists(userId);

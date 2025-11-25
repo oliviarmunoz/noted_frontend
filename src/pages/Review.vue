@@ -252,7 +252,7 @@ export default {
 
     // TODO: FIX WHEN USER API IS IMPLEMENTED temporary user IDs
     const uri = computed(() => route.params.id);
-    const userId = localStorage.getItem('currentUser');
+    const userId = JSON.parse(localStorage.getItem('currentUser'));
     
     // Use composables (must be after userId is defined)
     const { addItemToPlaylist, removeItemFromPlaylist, loadPlaylistItems } = usePlaylists(userId);

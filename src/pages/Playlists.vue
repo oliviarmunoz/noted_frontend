@@ -110,7 +110,7 @@ export default {
   setup() {
     const router = useRouter();
     
-    const userId = localStorage.getItem('currentUser');
+    const userId = JSON.parse(localStorage.getItem('currentUser'));
 
     const favoritesItems = ref([]);
     const listenLaterItems = ref([]);

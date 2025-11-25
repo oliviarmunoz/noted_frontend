@@ -389,7 +389,7 @@ export default {
       if (!userId.value) {
         return { items: [], error: "User not authenticated" };
       }
-      const playlistComposable = usePlaylists(userId.value);
+      const playlistComposable = usePlaylists();
       return await playlistComposable.loadPlaylistItems(playlistName);
     };
     
@@ -397,7 +397,7 @@ export default {
       if (!userId.value) {
         return { success: false, error: "User not authenticated" };
       }
-      const playlistComposable = usePlaylists(userId.value);
+      const playlistComposable = usePlaylists();
       return await playlistComposable.removeItemFromPlaylist(itemId, playlistName);
     };
     

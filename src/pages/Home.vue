@@ -186,13 +186,8 @@ export default {
     const favoritesError = ref(null);
     const listenLaterError = ref(null);
 
-    // Wrapper functions for playlist operations that handle userId being null
-    const getPlaylistComposable = () => {
-      if (!userId.value) {
-        throw new Error("User not authenticated");
-      }
-      return usePlaylists(userId.value);
-    };
+    // Use composables
+    const { loadPlaylistItems, removeItemFromPlaylist } = usePlaylists();
     const { showToastNotification } = useToast();
     const { playlistUpdateEvent } = usePlaylistEvents();
 

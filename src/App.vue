@@ -140,26 +140,10 @@ export default {
     const searchTimeout = ref(null);
     const addingToPlaylist = ref({});
 
-    // Get userId from authenticated user
-    const userId = ref(null);
+    const userId = JSON.parse(localStorage.getItem('currentUser'));
 
-    // Update userId when currentUser changes
-    watch(
-      () => currentUser.value,
-      (user) => {
-        // currentUser might be the user object or just the user ID string
-        userId.value = user?._id || user || null;
-      },
-      { immediate: true }
-    );
-
-    // Wrapper function for playlist operations that handle userId being null
-    const getPlaylistComposable = () => {
-      if (!userId.value) {
-        throw new Error("User not authenticated");
-      }
-      return usePlaylists(userId.value);
-    };
+    // Use composables
+    const { addItemToPlaylist } = usePlaylists();
     const { toastMessage, showToast, showToastNotification } = useToast();
     const { triggerPlaylistUpdate } = usePlaylistEvents();
     const { logout, isAuthenticated } = useAuth();

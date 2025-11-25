@@ -232,6 +232,7 @@
 import { ref, computed, watch, onMounted } from "vue";
 import { useRoute } from "vue-router";
 import { review, musicDiscovery, auth } from "../api/api.js";
+import { review, musicDiscovery, auth } from "../api/api.js";
 import { usePlaylists } from "../composables/usePlaylists.js";
 import { useToast } from "../composables/useToast.js";
 import { usePlaylistEvents } from "../composables/usePlaylistEvents.js";
@@ -395,7 +396,7 @@ export default {
               return null;
             }
 
-            const reviewId = r._id || r.review || r.id;
+            const reviewId = r._id;
 
             if (!reviewId) {
               console.error("Review missing ID field:", r);
@@ -445,6 +446,14 @@ export default {
                 err
               );
             }
+
+            // get username from user id
+            const res = await auth.getUsername(r.user);
+            const username =
+              res && res.length > 0 && res[0].username
+                ? res[0].username
+                : r.user;
+
             return {
               id: reviewId,
               userId: reviewUserId,

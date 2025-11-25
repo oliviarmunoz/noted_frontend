@@ -51,10 +51,10 @@ export const playlist = {
     apiCall("/api/Playlist/deletePlaylist", { user, playlistName }),
 
   addItem: (user, item, playlistName) =>
-    apiCall("/api/Playlist/addPlaylistItem", { user, item, playlistName }),
+    apiCall("/api/Playlist/addItem", { user, item, playlistName }),
 
   deleteItem: (user, item, playlistName) =>
-    apiCall("/api/Playlist/removePlaylistItem", { user, item, playlistName }),
+    apiCall("/api/Playlist/deleteItem", { user, item, playlistName }),
 
   getPlaylistItems: (user, playlistName) =>
     apiCall("/api/Playlist/_getPlaylistItems", { user, playlistName }),
@@ -107,14 +107,14 @@ export const auth = {
     apiCall("/api/UserAuthentication/register", { username, password }),
 
   login: (username, password) =>
-    apiCall("/api/UserAuthentication/login", { username, password }),
+    apiCall("/api/UserAuthentication/authenticate", { username, password }),
 
-  changePassword: (user, oldPassword, newPassword) =>
-    apiCall("/api/UserAuthentication/changePassword", {
-      user,
-      oldPassword,
-      newPassword,
-    }),
+  // changePassword: (user, oldPassword, newPassword) =>
+  //   apiCall("/api/UserAuthentication/changePassword", {
+  //     user,
+  //     oldPassword,
+  //     newPassword,
+  //   }),
 
   getUsername: (user) =>
     apiCall("/api/UserAuthentication/_getUsername", { user }),

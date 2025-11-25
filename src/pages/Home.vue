@@ -4,39 +4,79 @@
       <!-- Sidebar -->
       <aside class="sidebar">
         <div class="sidebar-section">
-          <h2 class="sidebar-title">TO LISTEN</h2>
-          <ul class="song-list">
+          <h2 class="sidebar-title">LISTEN LATER</h2>
+          <div v-if="loadingListenLater" class="loading-text">Loading...</div>
+          <div v-else-if="listenLaterError" class="error-text">{{ listenLaterError }}</div>
+          <ul v-else class="song-list">
             <li
+              v-for="item in listenLaterItems"
+              :key="item.item"
               class="song-item"
-              v-for="i in 4"
-              :key="i"
-              @click="$router.push(`/song/${i}`)"
-              style="cursor: pointer"
             >
-              <input type="checkbox" class="checkbox" @click.stop />
-              <div class="song-info">
-                <div class="song-name">Song / Album Name</div>
-                <div class="song-artist">Artist</div>
+              <div class="song-item-content" @click="navigateToReview(item)">
+                <img
+                  v-if="item.imageUrl"
+                  :src="item.imageUrl"
+                  :alt="item.name"
+                  class="song-thumbnail"
+                />
+                <div v-else class="song-thumbnail-placeholder">
+                  {{ item.name?.charAt(0) || "?" }}
+                </div>
+                <div class="song-info">
+                  <div class="song-name">{{ item.name || "Loading..." }}</div>
+                  <div class="song-artist">{{ item.artist || "" }}</div>
+                </div>
               </div>
+              <button
+                class="remove-btn"
+                @click.stop="removeFromPlaylist(item, 'Listen Later')"
+                title="Remove from Listen Later"
+              >
+                ×
+              </button>
+            </li>
+            <li v-if="listenLaterItems.length === 0" class="empty-message">
+              No songs in Listen Later
             </li>
           </ul>
         </div>
 
         <div class="sidebar-section">
           <h2 class="sidebar-title">FAVORITES</h2>
-          <ul class="song-list">
+          <div v-if="loadingFavorites" class="loading-text">Loading...</div>
+          <div v-else-if="favoritesError" class="error-text">{{ favoritesError }}</div>
+          <ul v-else class="song-list">
             <li
+              v-for="item in favoritesItems"
+              :key="item.item"
               class="song-item"
-              v-for="i in 4"
-              :key="i"
-              @click="$router.push(`/song/${i + 10}`)"
-              style="cursor: pointer"
             >
-              <input type="checkbox" class="checkbox" @click.stop />
-              <div class="song-info">
-                <div class="song-name">Song / Album Name</div>
-                <div class="song-artist">Artist</div>
+              <div class="song-item-content" @click="navigateToReview(item)">
+                <img
+                  v-if="item.imageUrl"
+                  :src="item.imageUrl"
+                  :alt="item.name"
+                  class="song-thumbnail"
+                />
+                <div v-else class="song-thumbnail-placeholder">
+                  {{ item.name?.charAt(0) || "?" }}
+                </div>
+                <div class="song-info">
+                  <div class="song-name">{{ item.name || "Loading..." }}</div>
+                  <div class="song-artist">{{ item.artist || "" }}</div>
+                </div>
               </div>
+              <button
+                class="remove-btn"
+                @click.stop="removeFromPlaylist(item, 'Favorites')"
+                title="Remove from Favorites"
+              >
+                ×
+              </button>
+            </li>
+            <li v-if="favoritesItems.length === 0" class="empty-message">
+              No favorites yet
             </li>
           </ul>
         </div>
@@ -53,7 +93,7 @@
           </div>
           <div
             class="song-details"
-            @click="$router.push(`/song/${review.songId}`)"
+            @click="navigateFromFeed(review)"
             style="cursor: pointer"
           >
             <span class="play-icon">▶</span>
@@ -88,8 +128,168 @@
 </template>
 
 <script>
+import { ref, onMounted, watch } from "vue";
+import { useRouter } from "vue-router";
+import { usePlaylists } from "../composables/usePlaylists.js";
+import { useToast } from "../composables/useToast.js";
+import { usePlaylistEvents } from "../composables/usePlaylistEvents.js";
+
 export default {
   name: "Home",
+  setup() {
+    const router = useRouter();
+    
+    // TODO: Get from session/auth when implemented
+    const userId = "user1";
+
+    const favoritesItems = ref([]);
+    const listenLaterItems = ref([]);
+    const loadingFavorites = ref(false);
+    const loadingListenLater = ref(false);
+    const favoritesError = ref(null);
+    const listenLaterError = ref(null);
+
+    // Use composables
+    const { loadPlaylistItems, removeItemFromPlaylist } = usePlaylists(userId);
+    const { showToastNotification } = useToast();
+    const { playlistUpdateEvent } = usePlaylistEvents();
+
+    // Load favorites
+    const loadFavorites = async () => {
+      loadingFavorites.value = true;
+      favoritesError.value = null;
+
+      try {
+        const result = await loadPlaylistItems("Favorites");
+        if (result.error) {
+          favoritesError.value = result.error;
+          favoritesItems.value = [];
+        } else {
+          favoritesItems.value = result.items;
+        }
+      } catch (error) {
+        console.error("[Home] Error loading favorites:", error);
+        favoritesError.value = error.message || "Failed to load favorites";
+        favoritesItems.value = [];
+      } finally {
+        loadingFavorites.value = false;
+      }
+    };
+
+    // Load listen later
+    const loadListenLater = async () => {
+      loadingListenLater.value = true;
+      listenLaterError.value = null;
+
+      try {
+        const result = await loadPlaylistItems("Listen Later");
+        if (result.error) {
+          listenLaterError.value = result.error;
+          listenLaterItems.value = [];
+        } else {
+          listenLaterItems.value = result.items;
+        }
+      } catch (error) {
+        console.error("[Home] Error loading listen later:", error);
+        listenLaterError.value = error.message || "Failed to load listen later";
+        listenLaterItems.value = [];
+      } finally {
+        loadingListenLater.value = false;
+      }
+    };
+
+    // Navigate to review page
+    const navigateToReview = (item) => {
+      if (!item.uri) {
+        console.error("Item missing URI:", item);
+        return;
+      }
+
+      const encodedUri = encodeURIComponent(item.uri);
+      router.push(`/review/${encodedUri}`);
+    };
+
+    // Navigate from activity feed (uses sample data with songId/uri)
+    const navigateFromFeed = (review) => {
+      const uri = review.songUri || review.uri;
+      
+      // Check if we have a valid Spotify URI
+      if (!uri || !uri.startsWith("spotify:")) {
+        // If it's just a number (sample data), show a message
+        if (review.songId && typeof review.songId === "number") {
+          showToastNotification("This is sample data. Click on real reviews to view songs.");
+          return;
+        }
+        console.error("Feed item missing valid URI:", review);
+        showToastNotification("Cannot navigate: Song URI not available");
+        return;
+      }
+      
+      router.push(`/review/${encodeURIComponent(uri)}`);
+    };
+
+    // Remove item from playlist
+    const removeFromPlaylist = async (item, playlistName) => {
+      if (!item.item) {
+        showToastNotification("Error: Item ID not found");
+        return;
+      }
+
+      try {
+        const result = await removeItemFromPlaylist(item.item, playlistName);
+        
+        if (!result.success) {
+          showToastNotification(result.error || `Error removing from ${playlistName}`);
+          return;
+        }
+
+        showToastNotification(`Removed from ${playlistName}`);
+        
+        // Reload the playlist
+        if (playlistName === "Favorites") {
+          await loadFavorites();
+        } else {
+          await loadListenLater();
+        }
+      } catch (error) {
+        console.error(`[Home] Error removing from ${playlistName}:`, error);
+        showToastNotification(`Error removing from ${playlistName}`);
+      }
+    };
+
+    // Watch for playlist updates from other components
+    watch(
+      () => playlistUpdateEvent.value,
+      (update) => {
+        if (update) {
+          // Refresh the playlist that was updated
+          if (update.playlistName === "Favorites") {
+            loadFavorites();
+          } else if (update.playlistName === "Listen Later") {
+            loadListenLater();
+          }
+        }
+      }
+    );
+
+    // Load playlists on mount
+    onMounted(() => {
+      loadFavorites();
+      loadListenLater();
+    });
+
+    return {
+      favoritesItems,
+      listenLaterItems,
+      loadingFavorites,
+      loadingListenLater,
+      favoritesError,
+      listenLaterError,
+      navigateToReview,
+      navigateFromFeed,
+      removeFromPlaylist,
+    };
+  },
   data() {
     return {
       reviews: [
@@ -167,7 +367,8 @@ export default {
 
 .song-item {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
+  justify-content: space-between;
   gap: 0.75rem;
   padding: 0.5rem;
   border-radius: 4px;
@@ -178,11 +379,60 @@ export default {
   background-color: rgba(74, 158, 255, 0.1);
 }
 
-.checkbox {
-  width: 1.25rem;
-  height: 1.25rem;
-  margin-top: 0.25rem;
+.song-item-content {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+  min-width: 0;
   cursor: pointer;
+}
+
+.song-thumbnail {
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.song-thumbnail-placeholder {
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
+  background: rgba(74, 158, 255, 0.1);
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  font-weight: 900;
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.remove-btn {
+  width: 1.5rem;
+  height: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 107, 157, 0.1);
+  border: 1px solid rgba(255, 107, 157, 0.3);
+  border-radius: 4px;
+  color: #ff6b9d;
+  cursor: pointer;
+  font-size: 1.2rem;
+  line-height: 1;
+  padding: 0;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.remove-btn:hover {
+  background: rgba(255, 107, 157, 0.2);
+  border-color: #ff6b9d;
+  transform: scale(1.1);
 }
 
 .song-info {
@@ -198,6 +448,30 @@ export default {
 .song-artist {
   font-size: 0.85rem;
   color: #7b8ca8;
+}
+
+.loading-text,
+.error-text {
+  padding: 1rem;
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+.loading-text {
+  color: #7b8ca8;
+}
+
+.error-text {
+  color: #ff6b9d;
+}
+
+.empty-message {
+  padding: 1rem;
+  text-align: center;
+  color: #7b8ca8;
+  font-size: 0.85rem;
+  font-style: italic;
+  list-style: none;
 }
 
 /* Feed */

@@ -1,4 +1,7 @@
-const API_BASE_URL = 'http://localhost:8000';
+// In development, use relative URLs (proxied by Vite)
+// In production, use the environment variable or default to the production API
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 
+  (import.meta.env.DEV ? '' : 'http://localhost:8000');
 
 // Helper function to make API calls
 async function apiCall(endpoint, body = {}) {
@@ -51,10 +54,10 @@ export const playlist = {
     apiCall("/api/Playlist/deletePlaylist", { user, playlistName }),
 
   addItem: (user, item, playlistName) =>
-    apiCall("/api/Playlist/addPlaylistItem", { user, item, playlistName }),
+    apiCall("/api/Playlist/addItem", { user, item, playlistName }),
 
   deleteItem: (user, item, playlistName) =>
-    apiCall("/api/Playlist/removePlaylistItem", { user, item, playlistName }),
+    apiCall("/api/Playlist/deleteItem", { user, item, playlistName }),
 
   getPlaylistItems: (user, playlistName) =>
     apiCall("/api/Playlist/_getPlaylistItems", { user, playlistName }),
@@ -91,8 +94,8 @@ export const review = {
 
 // Session API
 export const session = {
-  createSession: (user) => 
-    apiCall('/api/Session/createSession', { user }),
+  create: (user) => 
+    apiCall('/api/Session/create', { user }),
   
   delete: (session) => 
     apiCall('/api/Session/delete', { session }),
@@ -106,24 +109,14 @@ export const auth = {
   register: (username, password) =>
     apiCall("/api/UserAuthentication/register", { username, password }),
 
-  login: (username, password) =>
-    apiCall("/api/UserAuthentication/login", { username, password }),
-
-  changePassword: (user, oldPassword, newPassword) =>
-    apiCall("/api/UserAuthentication/changePassword", {
-      user,
-      oldPassword,
-      newPassword,
-    }),
+  authenticate: (username, password) =>
+    apiCall("/api/UserAuthentication/authenticate", { username, password }),
 
   getUsername: (user) =>
     apiCall("/api/UserAuthentication/_getUsername", { user }),
 
   getUserByUsername: (username) =>
     apiCall("/api/UserAuthentication/_getUserByUsername", { username }),
-
-  userExists: (username) =>
-    apiCall("/api/UserAuthentication/_userExists", { username }),
 };
 
 // MusicDiscovery API

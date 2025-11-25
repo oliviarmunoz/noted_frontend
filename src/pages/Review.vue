@@ -16,17 +16,26 @@
               {{ songInfo.name?.charAt(0) || "?" }}
             </div>
           </div>
-          <button
-            @click="handleToggleFavorite"
-            class="favorite-btn"
-            :class="{ 'is-favorite': isFavorite }"
-            :title="isFavorite ? 'Remove from Favorites' : 'Add to Favorites'"
-          >
-            <span class="heart-icon">{{ isFavorite ? "♥" : "♡" }}</span>
-            <span class="favorite-text">
-              {{ isFavorite ? "Favorite" : "Favorite" }}
-            </span>
-          </button>
+          <div class="playlist-buttons">
+            <button
+              @click="handleTogglePlaylist('Favorites')"
+              class="playlist-action-btn"
+              :class="{ 'is-active': isInFavorites }"
+              :title="isInFavorites ? 'Remove from Favorites' : 'Add to Favorites'"
+            >
+              <span class="playlist-icon">{{ isInFavorites ? "♥" : "♡" }}</span>
+              <span class="playlist-text">Favorites</span>
+            </button>
+            <button
+              @click="handleTogglePlaylist('Listen Later')"
+              class="playlist-action-btn"
+              :class="{ 'is-active': isInListenLater }"
+              :title="isInListenLater ? 'Remove from Listen Later' : 'Add to Listen Later'"
+            >
+              <span class="playlist-icon">⏱</span>
+              <span class="playlist-text">Listen Later</span>
+            </button>
+          </div>
         </div>
 
         <div class="song-info">
@@ -214,7 +223,10 @@
 <script>
 import { ref, computed, watch, onMounted } from "vue";
 import { useRoute } from "vue-router";
-import { playlist, review, musicDiscovery } from "../api/api.js";
+import { review, musicDiscovery } from "../api/api.js";
+import { usePlaylists } from "../composables/usePlaylists.js";
+import { useToast } from "../composables/useToast.js";
+import { usePlaylistEvents } from "../composables/usePlaylistEvents.js";
 
 export default {
   name: "Review",
@@ -230,11 +242,10 @@ export default {
     const reviewsError = ref(null);
     const hoverRating = ref(0);
     const commentInputs = ref({});
-    const showToast = ref(false);
-    const toastMessage = ref("");
     const newlyAddedReviewId = ref(null);
     const reviewsSection = ref(null);
-    const isFavorite = ref(false);
+    const isInFavorites = ref(false);
+    const isInListenLater = ref(false);
     const showDeleteModal = ref(false);
     const deleteModalType = ref(null); // 'review' or 'comment'
     const deleteModalData = ref(null);
@@ -242,6 +253,11 @@ export default {
     // TODO: FIX WHEN USER API IS IMPLEMENTED temporary user IDs
     const uri = computed(() => route.params.id);
     const userId = "user1";
+    
+    // Use composables (must be after userId is defined)
+    const { addItemToPlaylist, removeItemFromPlaylist, loadPlaylistItems } = usePlaylists(userId);
+    const { toastMessage, showToast, showToastNotification } = useToast();
+    const { triggerPlaylistUpdate } = usePlaylistEvents();
 
     const itemId = ref(null);
     const songInfo = ref(null);
@@ -280,6 +296,7 @@ export default {
             album: musicEntity.album || musicEntity.albumName || "",
             albumArt: musicEntity.imageUrl || null,
             releaseDate: musicEntity.releaseDate || null,
+            externalId: musicEntity.externalId || null,
           };
         }
       } catch (err) {
@@ -404,7 +421,7 @@ export default {
           return;
         }
 
-        await loadFavoriteStatus();
+        await loadPlaylistStatus();
         await Promise.all([loadMyReview(), loadAllReviews()]);
       } catch (err) {
         error.value = err.message || "Failed to load reviews";
@@ -419,14 +436,7 @@ export default {
       myRating.value = rating;
     };
 
-    // Show toast notification
-    const showToastNotification = (message) => {
-      toastMessage.value = message;
-      showToast.value = true;
-      setTimeout(() => {
-        showToast.value = false;
-      }, 3000);
-    };
+    // Note: showToastNotification is now from useToast composable
 
     // Save or update review
     const handleSaveReview = async () => {
@@ -697,98 +707,109 @@ export default {
       }
     );
 
-    // reload favorite status when itemId changes
+    // reload playlist status when itemId changes
     watch(
       () => uri.value,
       async () => {
         if (uri.value) {
-          await loadFavoriteStatus();
+          await loadPlaylistStatus();
         }
       }
     );
 
-    const getFavoritesPlaylist = async () => {
-      try {
-        const playlists = await playlist.getUserPlaylists(userId);
-
-        if (playlists && playlists.error) {
-          console.error("Error getting playlists:", playlists.error);
-          return null;
-        }
-
-        const favoritesPlaylist = (playlists || []).find(
-          (p) => p.name === "Favorites"
-        );
-
-        return favoritesPlaylist?._id || null;
-      } catch (err) {
-        console.error("Error getting Favorites playlist:", err);
-        return null;
+    // Toggle item in playlist (add or remove)
+    const handleTogglePlaylist = async (playlistName) => {
+      if (!songInfo.value?.externalId && !itemId.value) {
+        showToastNotification("Error: Song ID not found");
+        return;
       }
-    };
 
-    // toggle favorite status
-    const handleToggleFavorite = async () => {
+      // Use externalId for playlist operations
+      const itemIdToUse = songInfo.value?.externalId || itemId.value;
+      const isInPlaylist = playlistName === "Favorites" ? isInFavorites.value : isInListenLater.value;
+
       try {
-        const favoritesPlaylistId = await getFavoritesPlaylist();
-
-        if (!favoritesPlaylistId) {
-          reviewError.value = "Favorites playlist not found";
-          return;
-        }
-
-        if (isFavorite.value) {
-          // Remove item from Favorites playlist
-          const result = await playlist.removePlaylistItem(
-            favoritesPlaylistId,
-            userId,
-            itemId.value
-          );
-
-          if (result && result.error) {
-            reviewError.value = result.error;
+        if (isInPlaylist) {
+          // Remove from playlist
+          const result = await removeItemFromPlaylist(itemIdToUse, playlistName);
+          if (!result.success) {
+            showToastNotification(result.error || `Error removing from ${playlistName}`);
             return;
           }
-
-          isFavorite.value = false;
+          showToastNotification(`Removed from ${playlistName}`);
+          
+          // Trigger playlist update event so Home page can refresh
+          triggerPlaylistUpdate(playlistName);
+          
+          if (playlistName === "Favorites") {
+            isInFavorites.value = false;
+          } else {
+            isInListenLater.value = false;
+          }
         } else {
-          // Add item to Favorites playlist
-          const result = await playlist.addPlaylistItem(
-            favoritesPlaylistId,
-            userId,
-            itemId.value
-          );
-
-          if (result && result.error) {
-            reviewError.value = result.error;
+          // Add to playlist
+          const result = await addItemToPlaylist(itemIdToUse, playlistName);
+          if (!result.success) {
+            // Format error message to show song name instead of ID
+            let errorMessage = result.error || `Error adding to ${playlistName}`;
+            if (errorMessage.includes("already in playlist") && songInfo.value?.name) {
+              // Replace the item ID with the song name in the error message
+              // Handles formats like: Item 'ID' or Item "ID" or just the ID
+              errorMessage = errorMessage.replace(
+                /Item\s+['"]?[^'"]+['"]?/,
+                `"${songInfo.value.name}"`
+              );
+            }
+            showToastNotification(errorMessage);
             return;
           }
-
-          isFavorite.value = true;
+          showToastNotification(`Added to ${playlistName}!`);
+          
+          // Trigger playlist update event so Home page can refresh
+          triggerPlaylistUpdate(playlistName);
+          
+          if (playlistName === "Favorites") {
+            isInFavorites.value = true;
+          } else {
+            isInListenLater.value = true;
+          }
         }
       } catch (err) {
-        reviewError.value = err.message || "Failed to update favorite status";
-        console.error("Error toggling favorite:", err);
+        console.error(`[Review] Error toggling ${playlistName}:`, err);
+        showToastNotification(`Error updating ${playlistName}`);
       }
     };
 
-    // load favorite status
-    const loadFavoriteStatus = async () => {
-      try {
-        const favoritesPlaylistId = await getFavoritesPlaylist();
+    // Load playlist status (check if song is in Favorites or Listen Later)
+    const loadPlaylistStatus = async () => {
+      if (!songInfo.value?.externalId && !itemId.value) {
+        isInFavorites.value = false;
+        isInListenLater.value = false;
+        return;
+      }
 
-        if (!favoritesPlaylistId) {
-          isFavorite.value = false;
-          return;
+      const itemIdToUse = songInfo.value?.externalId || itemId.value;
+
+      try {
+        // Check Favorites
+        const favoritesResult = await loadPlaylistItems("Favorites");
+        if (!favoritesResult.error) {
+          isInFavorites.value = favoritesResult.items.some(
+            (item) => item.item === itemIdToUse
+          );
         }
 
-        // Get all items in the Favorites playlist
-        const items = await playlist.getPlaylistItems(userId, "Favorites");
-
-        isFavorite.value = items.some((item) => item.item === itemId.value);
+        // Check Listen Later
+        const listenLaterResult = await loadPlaylistItems("Listen Later");
+        if (!listenLaterResult.error) {
+          isInListenLater.value = listenLaterResult.items.some(
+            (item) => item.item === itemIdToUse
+          );
+        }
       } catch (err) {
-        console.error("Error loading favorite status:", err);
-        isFavorite.value = false;
+        console.error("[Review] Error loading playlist status:", err);
+        isInFavorites.value = false;
+        isInListenLater.value = false;
       }
     };
 
@@ -825,12 +846,15 @@ export default {
       toastMessage,
       newlyAddedReviewId,
       reviewsSection,
-      isFavorite,
+      isInFavorites,
+      isInListenLater,
       handleRatingChange,
       handleSaveReview,
       handleDeleteReview,
-      handleToggleFavorite,
+      handleTogglePlaylist,
       formatReleaseDate,
+      isInFavorites,
+      isInListenLater,
       commentInputs,
       handleAddComment,
       handleDeleteComment,
@@ -953,7 +977,14 @@ export default {
   margin-right: 0.5rem;
 }
 
-.favorite-btn {
+.playlist-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.playlist-action-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -970,29 +1001,29 @@ export default {
   width: 100%;
 }
 
-.favorite-btn:hover {
+.playlist-action-btn:hover {
   background: rgba(74, 158, 255, 0.2);
   border-color: #4a9eff;
   transform: translateY(-1px);
 }
 
-.favorite-btn.is-favorite {
+.playlist-action-btn.is-active {
   background: rgba(255, 107, 157, 0.1);
   border-color: rgba(255, 107, 157, 0.3);
   color: #ff6b9d;
 }
 
-.favorite-btn.is-favorite:hover {
+.playlist-action-btn.is-active:hover {
   background: rgba(255, 107, 157, 0.2);
   border-color: #ff6b9d;
 }
 
-.heart-icon {
+.playlist-icon {
   font-size: 1.1rem;
   line-height: 1;
 }
 
-.favorite-text {
+.playlist-text {
   font-size: 0.9rem;
 }
 

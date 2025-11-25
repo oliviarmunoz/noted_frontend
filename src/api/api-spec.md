@@ -899,130 +899,111 @@
 
 # API Specification: Session Concept
 
-**Purpose:** support authentication and user state across multiple requests via session tokens
+**Purpose:** maintain a user's logged-in state across multiple requests without re-sending credentials.
 
 ---
 
 ## API Endpoints
 
-### POST /api/Session/createSession
+### POST /api/Session/create
 
-**Description:** Creates a new session for a user, returning a session ID.
+**Description:** Creates a new session and associates it with a given user.
 
 **Requirements:**
-
-- `user` exists
+- true.
 
 **Effects:**
-
-- creates a new `Session` `s`; sets `user` of `s` to `user`;
-- returns `s` as `session`
+- a new session is created; the session is associated with the given user; returns the session created
 
 **Request Body:**
-
 ```json
 {
-  "user": "string"
+  "user": "ID"
 }
 ```
 
 **Success Response Body (Action):**
-
 ```json
 {
-  "session": "string"
+  "session": "ID"
 }
 ```
 
 **Error Response Body:**
-
 ```json
 {
   "error": "string"
 }
 ```
-
 ---
 
 ### POST /api/Session/delete
 
-**Description:** Deletes an active session.
+**Description:** Deletes an existing session.
 
 **Requirements:**
-
-- `session` exists
+- the given session exists
 
 **Effects:**
-
-- deletes `session`
+- the session is removed
 
 **Request Body:**
-
 ```json
 {
-  "session": "string"
+  "session": "ID"
 }
 ```
 
 **Success Response Body (Action):**
-
 ```json
 {}
 ```
 
 **Error Response Body:**
-
 ```json
 {
   "error": "string"
 }
 ```
-
 ---
 
-### POST /api/Session/\_getUser
+### POST /api/Session/_getUser
 
-**Description:** Returns the user associated with a given active session.
+**Description:** Retrieves the user associated with a given session.
 
 **Requirements:**
-
-- `session` exists and is not expired
+- the given session exists
 
 **Effects:**
-
-- returns the `user` associated with `session`
+- returns the user associated with the session.
 
 **Request Body:**
-
 ```json
 {
-  "session": "string"
+  "session": "ID"
 }
 ```
 
 **Success Response Body (Query):**
-
 ```json
 [
   {
-    "user": "string"
+    "user": "ID"
   }
 ]
 ```
 
 **Error Response Body:**
-
 ```json
 {
   "error": "string"
 }
 ```
-
 ---
 
 # API Specification: UserAuthentication Concept
 
-**Purpose:** allow users to register with a unique username and password, and then login to authenticate
+**Purpose:** enable users to register and verify their identity using a username and password.
 
 ---
 
@@ -1033,236 +1014,133 @@
 **Description:** Registers a new user with a unique username and password.
 
 **Requirements:**
-
-- `username` is unique; `password` meets complexity requirements (e.g., min length)
+- the username must not already exist in the system
 
 **Effects:**
-
-- creates a new `User` `u`; sets `username` of `u` to `username`;
-- sets `password` of `u` to a hashed version of `password`; returns `u` as `user`
+- create a new User with this username and password, returns the user
 
 **Request Body:**
-
 ```json
 {
-  "username": "string",
-  "password": "string"
+  "username": "String",
+  "password": "String"
 }
 ```
 
 **Success Response Body (Action):**
-
 ```json
 {
-  "user": "string"
+  "user": "User"
 }
 ```
 
 **Error Response Body:**
-
 ```json
 {
   "error": "string"
 }
 ```
-
 ---
 
-### POST /api/UserAuthentication/login
+### POST /api/UserAuthentication/authenticate
 
-**Description:** Authenticates a user with a username and password, returning the user ID on success.
+**Description:** Authenticates a user using their username and password.
 
 **Requirements:**
-
-- `username` and `password` match an existing user
+- there exists a user with the given username and password
 
 **Effects:**
-
-- returns the `user` if credentials are valid
+- returns the registered user that matches with the given username and password
 
 **Request Body:**
-
 ```json
 {
-  "username": "string",
-  "password": "string"
+  "username": "String",
+  "password": "String"
 }
 ```
 
 **Success Response Body (Action):**
-
 ```json
 {
-  "user": "string"
+  "user": "User"
 }
 ```
 
 **Error Response Body:**
-
 ```json
 {
   "error": "string"
 }
 ```
-
 ---
 
-### POST /api/UserAuthentication/changePassword
+### POST /api/UserAuthentication/_getUsername
 
-**Description:** Allows a user to change their password, requiring the old password for verification.
-
-**Requirements:**
-
-- `user` exists; `oldPassword` matches current password of `user`; `newPassword` meets complexity requirements
-
-**Effects:**
-
-- sets `password` of `user` to a hashed version of `newPassword`
-
-**Request Body:**
-
-```json
-{
-  "user": "string",
-  "oldPassword": "string",
-  "newPassword": "string"
-}
-```
-
-**Success Response Body (Action):**
-
-```json
-{}
-```
-
-**Error Response Body:**
-
-```json
-{
-  "error": "string"
-}
-```
-
----
-
-### POST /api/UserAuthentication/\_getUsername
-
-**Description:** Returns the username for a given user ID.
+**Description:** Retrieves the username associated with a given user ID.
 
 **Requirements:**
-
-- `user` exists
+- user exists
 
 **Effects:**
-
-- returns the `username` of `user`
+- returns the username associated with the user
 
 **Request Body:**
-
 ```json
 {
-  "user": "string"
+  "user": "User"
 }
 ```
 
 **Success Response Body (Query):**
-
 ```json
 [
   {
-    "username": "string"
+    "username": "String"
   }
 ]
 ```
 
 **Error Response Body:**
-
 ```json
 {
   "error": "string"
 }
 ```
-
 ---
 
-### POST /api/UserAuthentication/\_getUserByUsername
+### POST /api/UserAuthentication/_getUserByUsername
 
-**Description:** Returns the user ID for a given username.
+**Description:** Retrieves a user ID by their username.
 
 **Requirements:**
-
-- `username` exists
+- a user with the given username exists
 
 **Effects:**
-
-- returns the `user` ID associated with `username`
+- if a user with the given username exists, returns that user; otherwise returns an error
 
 **Request Body:**
-
 ```json
 {
-  "username": "string"
+  "username": "String"
 }
 ```
 
 **Success Response Body (Query):**
-
 ```json
 [
   {
-    "user": "string"
+    "user": "User"
   }
 ]
 ```
 
 **Error Response Body:**
-
 ```json
 {
   "error": "string"
 }
 ```
-
----
-
-### POST /api/UserAuthentication/\_userExists
-
-**Description:** Checks if a user with the specified username exists.
-
-**Requirements:**
-
-- true
-
-**Effects:**
-
-- returns `true` if a user with `username` exists, `false` otherwise
-
-**Request Body:**
-
-```json
-{
-  "username": "string"
-}
-```
-
-**Success Response Body (Query):**
-
-```json
-[
-  {
-    "exists": "boolean"
-  }
-]
-```
-
-**Error Response Body:**
-
-```json
-{
-  "error": "string"
-}
-```
-
 ---
 
 # API Specification: MusicDiscovery Concept

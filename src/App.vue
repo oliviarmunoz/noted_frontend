@@ -6,10 +6,13 @@
         <router-link to="/" class="logo">
           <span class="caps">NOTED</span>
         </router-link>
+
         <div class="nav-links">
           <router-link to="/" class="nav-link">Home</router-link>
           <router-link to="/playlists" class="nav-link">Playlists</router-link>
         </div>
+
+        <!-- Search (using second version behavior) -->
         <div class="nav-search" ref="searchContainer">
           <input
             type="text"
@@ -21,10 +24,12 @@
             @blur="handleSearchBlur"
           />
           <span class="search-icon">🔍</span>
+
           <!-- Show loading state when searching -->
           <div v-if="showResults && isSearching" class="search-results">
             <div class="search-loading">Searching...</div>
           </div>
+
           <!-- Show results when not searching and we have results -->
           <div
             v-else-if="showResults && searchResults.length > 0"
@@ -50,14 +55,16 @@
                   <div class="result-artist" v-if="result.artistName">
                     {{ result.artistName }}
                   </div>
-                  <div class="result-type">{{ result.type || "track" }}</div>
+                  <div class="result-type">{{ result.type || 'track' }}</div>
                 </div>
               </div>
+
+              <!-- Keep playlist buttons from first App.vue -->
               <div class="result-actions">
                 <button
                   class="playlist-btn"
                   @click.stop="addToPlaylist(result, 'Favorites')"
-                  :disabled="addingToPlaylist[result._id]"
+                  :disabled="addingToPlaylist[result._id || result.uri]"
                   title="Add to Favorites"
                 >
                   ♥
@@ -65,7 +72,7 @@
                 <button
                   class="playlist-btn"
                   @click.stop="addToPlaylist(result, 'Listen Later')"
-                  :disabled="addingToPlaylist[result._id]"
+                  :disabled="addingToPlaylist[result._id || result.uri]"
                   title="Add to Listen Later"
                 >
                   ⏱
@@ -73,6 +80,7 @@
               </div>
             </div>
           </div>
+
           <!-- Show no results when not searching and no results -->
           <div
             v-else-if="
@@ -86,6 +94,7 @@
             <div class="search-no-results">No results found</div>
           </div>
         </div>
+
         <div class="nav-actions">
           <button class="icon-btn">
             <span class="icon">+</span>
@@ -119,7 +128,7 @@
 </template>
 
 <script>
-import { ref, onUnmounted, watch } from "vue";
+import { ref, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { musicDiscovery } from "./api/api.js";
 import { usePlaylists } from "./composables/usePlaylists.js";
@@ -131,7 +140,8 @@ export default {
   name: "App",
   setup() {
     const router = useRouter();
-    const { currentUser } = useAuth();
+    const { currentUser, logout, isAuthenticated } = useAuth();
+
     const searchQuery = ref("");
     const searchResults = ref([]);
     const showResults = ref(false);
@@ -140,14 +150,14 @@ export default {
     const searchTimeout = ref(null);
     const addingToPlaylist = ref({});
 
-    const userId = JSON.parse(localStorage.getItem('currentUser'));
+    // Get userId from localStorage (your original approach)
+    const userId = JSON.parse(localStorage.getItem("currentUser"));
 
-    // Use composables
     const { addItemToPlaylist } = usePlaylists();
     const { toastMessage, showToast, showToastNotification } = useToast();
     const { triggerPlaylistUpdate } = usePlaylistEvents();
-    const { logout, isAuthenticated } = useAuth();
 
+    // --- SEARCH (using second version logic, but fixed) ---
     const performSearch = async (query) => {
       if (!query || query.trim().length === 0) {
         searchResults.value = [];
@@ -155,21 +165,17 @@ export default {
         return;
       }
 
-      // Clear previous results when starting a new search to prevent overlap
-      searchResults.value = [];
       isSearching.value = true;
+      searchResults.value = [];
 
       try {
-        if (!userId.value) {
+        if (!userId) {
           console.error("[App] Cannot search: User not authenticated");
           searchResults.value = [];
           return;
         }
 
-        const response = await musicDiscovery.search(
-          userId.value,
-          query.trim()
-        );
+        const response = await musicDiscovery.search(userId, query.trim());
 
         if (response && response.error) {
           console.error("Search error:", response.error);
@@ -177,13 +183,11 @@ export default {
           return;
         }
 
-        // Filter to only show tracks (songs) for now
-        // You can modify this to show albums/artists too
         const entities = (response?.musicEntities || []).filter(
           (entity) => entity.type === "track" || !entity.type
         );
 
-        // Debug: Log the structure of search results
+        // Optional debug
         if (entities.length > 0) {
           console.log("[App] Search result structure:", {
             firstEntity: entities[0],
@@ -204,12 +208,8 @@ export default {
     };
 
     const handleSearchInput = () => {
-      // Clear existing timeout
-      if (searchTimeout.value) {
-        clearTimeout(searchTimeout.value);
-      }
+      if (searchTimeout.value) clearTimeout(searchTimeout.value);
 
-      // Debounce search - wait 300ms after user stops typing
       searchTimeout.value = setTimeout(() => {
         performSearch(searchQuery.value);
       }, 300);
@@ -221,23 +221,16 @@ export default {
         return;
       }
 
-      // Use the full URI (e.g., "spotify:track:xxxxx")
-      // URL-encode it for the route to handle colons
       const encodedUri = encodeURIComponent(result.uri);
-
-      // Navigate to review page
       router.push(`/review/${encodedUri}`);
 
-      // Clear search
       searchQuery.value = "";
       searchResults.value = [];
       showResults.value = false;
     };
 
-    const handleSearchBlur = (event) => {
-      // Delay hiding results to allow click events to fire
+    const handleSearchBlur = () => {
       setTimeout(() => {
-        // Check if focus moved to search results
         if (
           searchContainer.value &&
           !searchContainer.value.contains(document.activeElement)
@@ -247,9 +240,9 @@ export default {
       }, 200);
     };
 
-    // Add item to playlist
+    // --- PLAYLISTS (from first App.vue) ---
     const addToPlaylist = async (result, playlistName) => {
-      if (!userId.value) {
+      if (!userId) {
         showToastNotification("Error: User not authenticated");
         return;
       }
@@ -259,15 +252,10 @@ export default {
         return;
       }
 
-      // Use externalId for playlist items so we can retrieve them later with getEntityFromId
-      // The playlist API stores the item ID, and getEntityFromId expects externalId
       const itemId = result.externalId || result._id;
       const resultKey = result._id || result.uri;
 
-      // Prevent duplicate clicks
-      if (addingToPlaylist.value[resultKey]) {
-        return;
-      }
+      if (addingToPlaylist.value[resultKey]) return;
 
       addingToPlaylist.value[resultKey] = true;
 
@@ -279,19 +267,12 @@ export default {
           name: result.name,
         });
 
-        const playlistComposable = getPlaylistComposable();
-        const addResult = await playlistComposable.addItemToPlaylist(
-          itemId,
-          playlistName
-        );
+        const addResult = await addItemToPlaylist(itemId, playlistName);
 
         if (!addResult.success) {
-          // Format error message to show song name instead of ID
           let errorMessage =
             addResult.error || `Error adding to ${playlistName}`;
           if (errorMessage.includes("already in playlist") && result.name) {
-            // Replace the item ID with the song name in the error message
-            // Handles formats like: Item 'ID' or Item "ID" or just the ID
             errorMessage = errorMessage.replace(
               /Item\s+['"]?[^'"]+['"]?/,
               `"${result.name}"`
@@ -302,8 +283,6 @@ export default {
         }
 
         showToastNotification(`Added to ${playlistName}!`);
-
-        // Trigger playlist update event so Home page can refresh
         triggerPlaylistUpdate(playlistName);
       } catch (error) {
         console.error(`[App] Error adding to ${playlistName}:`, error);
@@ -317,14 +296,12 @@ export default {
       logout();
     };
 
-    // Cleanup timeout on unmount
     onUnmounted(() => {
-      if (searchTimeout.value) {
-        clearTimeout(searchTimeout.value);
-      }
+      if (searchTimeout.value) clearTimeout(searchTimeout.value);
     });
 
     return {
+      // state
       searchQuery,
       searchResults,
       showResults,
@@ -333,11 +310,12 @@ export default {
       addingToPlaylist,
       toastMessage,
       showToast,
+
+      // methods
       handleSearchInput,
       selectResult,
       handleSearchBlur,
       addToPlaylist,
-      showToastNotification,
       handleLogout,
       isAuthenticated,
     };
@@ -346,6 +324,7 @@ export default {
 </script>
 
 <style scoped>
+/* your first App.vue styles unchanged */
 #app {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
     Ubuntu, Cantarell, sans-serif;
@@ -634,39 +613,6 @@ export default {
   display: block;
 }
 
-/* Footer */
-.footer {
-  padding: 3rem 2rem;
-  border-top: 1px solid rgba(123, 140, 168, 0.2);
-  background: rgba(10, 14, 26, 0.8);
-  margin-top: auto;
-}
-
-.footer-content {
-  max-width: 1400px;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1rem;
-}
-
-.footer-logo {
-  font-size: 1.2rem;
-  font-weight: 900;
-  letter-spacing: -0.02em;
-  background: linear-gradient(135deg, #4a9eff 0%, #7b68ee 50%, #ff6b9d 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.footer-text {
-  font-size: 0.85rem;
-  color: #7b8ca8;
-  letter-spacing: 0.1em;
-}
-
 /* Toast Notification */
 .toast-notification {
   position: fixed;
@@ -728,7 +674,7 @@ export default {
   .nav-links {
     gap: 1rem;
     flex-wrap: wrap;
-    justify-content: center;
+    justify-content:center;
   }
 
   .nav-search {

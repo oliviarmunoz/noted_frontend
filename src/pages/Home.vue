@@ -543,11 +543,7 @@ export default {
 
     // Navigate from activity feed (uses sample data with songId/uri)
     const navigateFromFeed = (review) => {
-<<<<<<< HEAD
       const uri = review.songUri || review.uri;
-=======
-      const uri = review.uri;
->>>>>>> d419c5f (fixed some accidental overwrites)
 
       // Check if we have a valid Spotify URI
       if (!uri || !uri.startsWith("spotify:")) {
@@ -812,12 +808,8 @@ export default {
                 }
 
                 // Extract URI and other info from musicEntity
-<<<<<<< HEAD
                 const songUri =
                   musicEntity?.uri || musicEntity?.externalId || target;
-=======
-                const songUri = musicEntity?.uri;
->>>>>>> d419c5f (fixed some accidental overwrites)
                 const songName = musicEntity?.name || "Unknown Song";
                 const songArtist =
                   musicEntity?.artistName ||
@@ -829,15 +821,12 @@ export default {
 
                 // Get review ID
                 const reviewId = reviewData.review || reviewData._id;
-<<<<<<< HEAD
                 console.log("Review data structure:", {
                   reviewData,
                   reviewId,
                   reviewField: reviewData.review,
                   _idField: reviewData._id,
                 });
-=======
->>>>>>> d419c5f (fixed some accidental overwrites)
 
                 // Load comments for this review
                 let comments = [];

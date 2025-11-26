@@ -316,7 +316,7 @@ export default {
         }
 
         if (musicEntity) {
-          itemId.value = musicEntity._id || musicEntity.externalId;
+          itemId.value = musicEntity.externalId;
           songInfo.value = {
             name: musicEntity.name || "",
             artist: musicEntity.artistName || "",

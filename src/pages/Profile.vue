@@ -1851,4 +1851,8 @@ export default {
     flex-wrap: wrap;
   }
 }
+<<<<<<< HEAD
 </style>
+=======
+</style>
+>>>>>>> d419c5f (fixed some accidental overwrites)

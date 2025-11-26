@@ -1,11 +1,15 @@
 <template>
   <div id="app">
     <!-- Navigation -->
-    <nav class="navbar">
+    <nav v-if="isAuthenticated()" class="navbar">
       <div class="nav-container">
         <router-link to="/" class="logo">
           <span class="caps">NOTED</span>
         </router-link>
+        <div class="nav-links">
+          <router-link to="/" class="nav-link">Home</router-link>
+          <router-link to="/playlists" class="nav-link">Playlists</router-link>
+        </div>
         <div class="nav-search" ref="searchContainer">
           <input
             type="text"
@@ -30,26 +34,46 @@
               v-for="result in searchResults"
               :key="result._id || result.uri"
               class="search-result-item"
-              @mousedown="selectResult(result)"
             >
-              <img
-                v-if="result.imageUrl"
-                :src="result.imageUrl"
-                :alt="result.name"
-                class="result-image"
-              />
-              <div v-else class="result-image-placeholder">
-                {{ result.name?.charAt(0) || "?" }}
-              </div>
-              <div class="result-info">
-                <div class="result-name">{{ result.name }}</div>
-                <div class="result-artist" v-if="result.artistName">
-                  {{ result.artistName }}
+              <div class="result-main" @mousedown="selectResult(result)">
+                <img
+                  v-if="result.imageUrl"
+                  :src="result.imageUrl"
+                  :alt="result.name"
+                  class="result-image"
+                />
+                <div v-else class="result-image-placeholder">
+                  {{ result.name?.charAt(0) || "?" }}
                 </div>
-                <div class="result-type">{{ result.type || "track" }}</div>
+                <div class="result-info">
+                  <div class="result-name">{{ result.name }}</div>
+                  <div class="result-artist" v-if="result.artistName">
+                    {{ result.artistName }}
+                  </div>
+                  <div class="result-type">{{ result.type || "track" }}</div>
+                </div>
+              </div>
+              <div class="result-actions">
+                <button
+                  class="playlist-btn"
+                  @click.stop="addToPlaylist(result, 'Favorites')"
+                  :disabled="addingToPlaylist[result._id]"
+                  title="Add to Favorites"
+                >
+                  ♥
+                </button>
+                <button
+                  class="playlist-btn"
+                  @click.stop="addToPlaylist(result, 'Listen Later')"
+                  :disabled="addingToPlaylist[result._id]"
+                  title="Add to Listen Later"
+                >
+                  ⏱
+                </button>
               </div>
             </div>
           </div>
+          <!-- Show no results when not searching and no results -->
           <div
             v-else-if="
               showResults &&
@@ -60,9 +84,6 @@
             class="search-results"
           >
             <div class="search-no-results">No results found</div>
-          </div>
-          <div v-if="isSearching && showResults" class="search-results">
-            <div class="search-loading">Searching...</div>
           </div>
         </div>
         <div class="nav-actions">
@@ -86,6 +107,14 @@
 
     <!-- Page Content -->
     <router-view />
+
+    <!-- Toast Notification -->
+    <transition name="toast">
+      <div v-if="showToast" class="toast-notification">
+        <span class="toast-icon">✓</span>
+        <span class="toast-message">{{ toastMessage }}</span>
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -93,6 +122,10 @@
 import { ref, onUnmounted, watch } from "vue";
 import { useRouter } from "vue-router";
 import { musicDiscovery } from "./api/api.js";
+import { usePlaylists } from "./composables/usePlaylists.js";
+import { useToast } from "./composables/useToast.js";
+import { usePlaylistEvents } from "./composables/usePlaylistEvents.js";
+import { useAuth } from "./composables/useAuth.js";
 
 export default {
   name: "App",
@@ -105,16 +138,25 @@ export default {
     const isSearching = ref(false);
     const searchContainer = ref(null);
     const searchTimeout = ref(null);
+    const addingToPlaylist = ref({});
 
-    // TODO: Get from session/auth when implemented
-    const userId = "user1";
+    const userId = JSON.parse(localStorage.getItem('currentUser'));
+
+    // Use composables
+    const { addItemToPlaylist } = usePlaylists();
+    const { toastMessage, showToast, showToastNotification } = useToast();
+    const { triggerPlaylistUpdate } = usePlaylistEvents();
+    const { logout, isAuthenticated } = useAuth();
 
     const performSearch = async (query) => {
       if (!query || query.trim().length === 0) {
         searchResults.value = [];
+        isSearching.value = false;
         return;
       }
 
+      // Clear previous results when starting a new search to prevent overlap
+      searchResults.value = [];
       isSearching.value = true;
 
       try {
@@ -137,7 +179,7 @@ export default {
 
         // Filter to only show tracks (songs) for now
         // You can modify this to show albums/artists too
-        searchResults.value = (response?.musicEntities || []).filter(
+        const entities = (response?.musicEntities || []).filter(
           (entity) => entity.type === "track" || !entity.type
         );
 
@@ -288,9 +330,16 @@ export default {
       showResults,
       isSearching,
       searchContainer,
+      addingToPlaylist,
+      toastMessage,
+      showToast,
       handleSearchInput,
       selectResult,
       handleSearchBlur,
+      addToPlaylist,
+      showToastNotification,
+      handleLogout,
+      isAuthenticated,
     };
   },
 };
@@ -423,9 +472,9 @@ export default {
 .search-result-item {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 1rem;
   padding: 1rem;
-  cursor: pointer;
   transition: background 0.2s ease;
   border-bottom: 1px solid rgba(123, 140, 168, 0.1);
 }
@@ -436,6 +485,49 @@ export default {
 
 .search-result-item:hover {
   background: rgba(74, 158, 255, 0.1);
+}
+
+.result-main {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.result-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.playlist-btn {
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(74, 158, 255, 0.1);
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  border-radius: 4px;
+  color: #4a9eff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 1rem;
+  padding: 0;
+}
+
+.playlist-btn:hover:not(:disabled) {
+  background: rgba(74, 158, 255, 0.2);
+  border-color: #4a9eff;
+  transform: scale(1.1);
+}
+
+.playlist-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .result-image {
@@ -522,6 +614,16 @@ export default {
   font-size: 1.2rem;
 }
 
+.logout-btn {
+  width: auto;
+  min-width: 5.5rem;
+  padding: 0 1.25rem;
+  height: 2.5rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
 .icon-btn:hover {
   border-color: #4a9eff;
   color: #4a9eff;
@@ -563,6 +665,53 @@ export default {
   font-size: 0.85rem;
   color: #7b8ca8;
   letter-spacing: 0.1em;
+}
+
+/* Toast Notification */
+.toast-notification {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  background: rgba(26, 35, 52, 0.95);
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  border-radius: 8px;
+  padding: 1rem 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
+  z-index: 2000;
+}
+
+.toast-icon {
+  color: #4ade80;
+  font-size: 1.2rem;
+  font-weight: 900;
+}
+
+.toast-message {
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.toast-enter-active {
+  transition: all 0.3s ease-out;
+}
+
+.toast-leave-active {
+  transition: all 0.3s ease-in;
+}
+
+.toast-enter-from {
+  opacity: 0;
+  transform: translateY(20px) scale(0.95);
+}
+
+.toast-leave-to {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.95);
 }
 
 /* Responsive */

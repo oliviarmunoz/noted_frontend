@@ -715,16 +715,19 @@ export default {
         const friends = friendsResponse || [];
         const friendIds = friends.map((f) => f.friend || f);
 
-        // Get reviews from all friends
+        // Include current user in the list of users to fetch reviews from
+        const userIdsToFetch = [currentUser, ...friendIds];
+
+        // Get reviews from current user and all friends
         const allReviews = [];
 
-        for (const friendId of friendIds) {
+        for (const userId of userIdsToFetch) {
           try {
-            const userReviewsResponse = await review.getUserReviews(friendId);
+            const userReviewsResponse = await review.getUserReviews(userId);
 
             if (userReviewsResponse && userReviewsResponse.error) {
               console.warn(
-                `Error fetching reviews for friend ${friendId}:`,
+                `Error fetching reviews for user ${userId}:`,
                 userReviewsResponse.error
               );
               continue;
@@ -786,25 +789,22 @@ export default {
                 }
 
                 // Get reviewer username using _getUsername API
-                let reviewerName = friendId;
+                let reviewerName = userId;
                 try {
-                  const usernameResponse = await auth.getUsername(friendId);
+                  const usernameResponse = await auth.getUsername(userId);
                   // _getUsername returns an array: [{ username: "String" }]
                   if (usernameResponse && !usernameResponse.error) {
                     if (
                       Array.isArray(usernameResponse) &&
                       usernameResponse.length > 0
                     ) {
-                      reviewerName = usernameResponse[0].username || friendId;
+                      reviewerName = usernameResponse[0].username || userId;
                     } else if (usernameResponse.username) {
                       reviewerName = usernameResponse.username;
                     }
                   }
                 } catch (e) {
-                  console.warn(
-                    `Could not get username for user ${friendId}:`,
-                    e
-                  );
+                  console.warn(`Could not get username for user ${userId}:`, e);
                 }
 
                 // Extract URI and other info from musicEntity
@@ -879,7 +879,7 @@ export default {
               }
             }
           } catch (err) {
-            console.warn(`Error fetching reviews for friend ${friendId}:`, err);
+            console.warn(`Error fetching reviews for user ${userId}:`, err);
           }
         }
 

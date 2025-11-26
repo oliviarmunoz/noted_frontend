@@ -104,13 +104,14 @@ import { useRouter } from "vue-router";
 import { usePlaylists } from "../composables/usePlaylists.js";
 import { useToast } from "../composables/useToast.js";
 import { usePlaylistEvents } from "../composables/usePlaylistEvents.js";
+import { getUserId } from "../composables/useAuth.js";
 
 export default {
   name: "Playlists",
   setup() {
     const router = useRouter();
     
-    const userId = JSON.parse(localStorage.getItem('currentUser'));
+    const userId = getUserId();
 
     const favoritesItems = ref([]);
     const listenLaterItems = ref([]);

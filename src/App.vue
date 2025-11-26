@@ -134,7 +134,7 @@ import { musicDiscovery } from "./api/api.js";
 import { usePlaylists } from "./composables/usePlaylists.js";
 import { useToast } from "./composables/useToast.js";
 import { usePlaylistEvents } from "./composables/usePlaylistEvents.js";
-import { useAuth } from "./composables/useAuth.js";
+import { useAuth, getUserId } from "./composables/useAuth.js";
 
 export default {
   name: "App",
@@ -149,9 +149,6 @@ export default {
     const searchContainer = ref(null);
     const searchTimeout = ref(null);
     const addingToPlaylist = ref({});
-
-    // Get userId from localStorage (your original approach)
-    const userId = JSON.parse(localStorage.getItem("currentUser"));
 
     const { addItemToPlaylist } = usePlaylists();
     const { toastMessage, showToast, showToastNotification } = useToast();
@@ -169,6 +166,7 @@ export default {
       searchResults.value = [];
 
       try {
+        const userId = getUserId();
         if (!userId) {
           console.error("[App] Cannot search: User not authenticated");
           searchResults.value = [];
@@ -242,6 +240,7 @@ export default {
 
     // --- PLAYLISTS (from first App.vue) ---
     const addToPlaylist = async (result, playlistName) => {
+      const userId = getUserId();
       if (!userId) {
         showToastNotification("Error: User not authenticated");
         return;

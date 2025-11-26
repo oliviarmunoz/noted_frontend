@@ -1,6 +1,7 @@
 import { ref } from "vue";
 import { playlist } from "../api/api.js";
 import { useEntities } from "./useEntities.js";
+import { getUserId } from "./useAuth.js";
 
 /**
  * Composable for playlist management
@@ -15,7 +16,7 @@ export function usePlaylists() {
    */
   const ensurePlaylistExists = async (playlistName) => {
     try {
-      const userId = JSON.parse(localStorage.getItem('currentUser'));
+      const userId = getUserId();
       if (!userId) {
         console.error('[usePlaylists] No userId found in localStorage');
         return false;
@@ -59,7 +60,7 @@ export function usePlaylists() {
    */
   const addItemToPlaylist = async (itemId, playlistName) => {
     try {
-      const userId = JSON.parse(localStorage.getItem('currentUser'));
+      const userId = getUserId();
       if (!userId) {
         return { success: false, error: 'No userId found in localStorage' };
       }
@@ -91,7 +92,7 @@ export function usePlaylists() {
    */
   const loadPlaylistItems = async (playlistName) => {
     try {
-      const userId = JSON.parse(localStorage.getItem('currentUser'));
+      const userId = getUserId();
       if (!userId) {
         return { items: [], error: 'No userId found in localStorage' };
       }
@@ -127,7 +128,7 @@ export function usePlaylists() {
    */
   const removeItemFromPlaylist = async (itemId, playlistName) => {
     try {
-      const userId = JSON.parse(localStorage.getItem('currentUser'));
+      const userId = getUserId();
       if (!userId) {
         return { success: false, error: 'No userId found in localStorage' };
       }

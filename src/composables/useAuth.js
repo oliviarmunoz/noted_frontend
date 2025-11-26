@@ -20,6 +20,21 @@ const { user, session: sessionData } = initializeAuthState()
 const currentUser = ref(user)
 const currentSession = ref(sessionData)
 
+/**
+ * Safely get userId from localStorage
+ * @returns {string|null} The userId or null if not found/invalid
+ */
+export function getUserId() {
+  try {
+    const stored = localStorage.getItem('currentUser');
+    if (!stored || stored === 'undefined') return null;
+    return JSON.parse(stored);
+  } catch (error) {
+    console.error('[getUserId] Error parsing currentUser:', error);
+    return null;
+  }
+}
+
 export function useAuth() {
   const router = useRouter()
 

@@ -104,13 +104,26 @@ import { useRouter } from "vue-router";
 import { usePlaylists } from "../composables/usePlaylists.js";
 import { useToast } from "../composables/useToast.js";
 import { usePlaylistEvents } from "../composables/usePlaylistEvents.js";
+import { useAuth } from "../composables/useAuth.js";
 
 export default {
   name: "Playlists",
   setup() {
     const router = useRouter();
+    const { currentUser } = useAuth();
     
-    const userId = JSON.parse(localStorage.getItem('currentUser'));
+    // Get userId from authenticated user
+    const userId = ref(null);
+    
+    // Update userId when currentUser changes
+    watch(
+      () => currentUser.value,
+      (user) => {
+        // currentUser might be the user object or just the user ID string
+        userId.value = user?._id || user || null;
+      },
+      { immediate: true }
+    );
 
     const favoritesItems = ref([]);
     const listenLaterItems = ref([]);
@@ -126,11 +139,17 @@ export default {
 
     // Load favorites
     const loadFavorites = async () => {
+      if (!userId.value) {
+        favoritesItems.value = [];
+        return;
+      }
+      
       loadingFavorites.value = true;
       favoritesError.value = null;
 
       try {
-        const result = await loadPlaylistItems("Favorites");
+        const playlistComposable = getPlaylistComposable();
+        const result = await playlistComposable.loadPlaylistItems("Favorites");
         if (result.error) {
           favoritesError.value = result.error;
           favoritesItems.value = [];
@@ -148,11 +167,17 @@ export default {
 
     // Load listen later
     const loadListenLater = async () => {
+      if (!userId.value) {
+        listenLaterItems.value = [];
+        return;
+      }
+      
       loadingListenLater.value = true;
       listenLaterError.value = null;
 
       try {
-        const result = await loadPlaylistItems("Listen Later");
+        const playlistComposable = getPlaylistComposable();
+        const result = await playlistComposable.loadPlaylistItems("Listen Later");
         if (result.error) {
           listenLaterError.value = result.error;
           listenLaterItems.value = [];
@@ -181,13 +206,19 @@ export default {
 
     // Remove item from playlist
     const removeFromPlaylist = async (item, playlistName) => {
+      if (!userId.value) {
+        showToastNotification("Error: User not authenticated");
+        return;
+      }
+      
       if (!item.item) {
         showToastNotification("Error: Item ID not found");
         return;
       }
 
       try {
-        const result = await removeItemFromPlaylist(item.item, playlistName);
+        const playlistComposable = getPlaylistComposable();
+        const result = await playlistComposable.removeItemFromPlaylist(item.item, playlistName);
         
         if (!result.success) {
           showToastNotification(result.error || `Error removing from ${playlistName}`);

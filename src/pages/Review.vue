@@ -21,7 +21,9 @@
               @click="handleTogglePlaylist('Favorites')"
               class="playlist-action-btn"
               :class="{ 'is-active': isInFavorites }"
-              :title="isInFavorites ? 'Remove from Favorites' : 'Add to Favorites'"
+              :title="
+                isInFavorites ? 'Remove from Favorites' : 'Add to Favorites'
+              "
             >
               <span class="playlist-icon">{{ isInFavorites ? "♥" : "♡" }}</span>
               <span class="playlist-text">Favorites</span>
@@ -30,7 +32,11 @@
               @click="handleTogglePlaylist('Listen Later')"
               class="playlist-action-btn"
               :class="{ 'is-active': isInListenLater }"
-              :title="isInListenLater ? 'Remove from Listen Later' : 'Add to Listen Later'"
+              :title="
+                isInListenLater
+                  ? 'Remove from Listen Later'
+                  : 'Add to Listen Later'
+              "
             >
               <span class="playlist-icon">⏱</span>
               <span class="playlist-text">Listen Later</span>
@@ -115,7 +121,9 @@
             :class="{ 'newly-added': newlyAddedReviewId === review.id }"
           >
             <div class="activity-header">
-              <span class="activity-text">{{ review.userId }}</span>
+              <span class="activity-text">{{
+                review.username || review.userId
+              }}</span>
             </div>
             <div class="activity-rating">
               <span
@@ -227,11 +235,13 @@ import { review, musicDiscovery, auth } from "../api/api.js";
 import { usePlaylists } from "../composables/usePlaylists.js";
 import { useToast } from "../composables/useToast.js";
 import { usePlaylistEvents } from "../composables/usePlaylistEvents.js";
+import { useAuth } from "../composables/useAuth.js";
 
 export default {
   name: "Review",
   setup() {
     const route = useRoute();
+    const { currentUser } = useAuth();
 
     // State management
     const loading = ref(true);
@@ -250,14 +260,31 @@ export default {
     const deleteModalType = ref(null); // 'review' or 'comment'
     const deleteModalData = ref(null);
 
-    // TODO: FIX WHEN USER API IS IMPLEMENTED temporary user IDs
     const uri = computed(() => route.params.id);
-    const userId = JSON.parse(localStorage.getItem('currentUser'));
-    
-    // Use composables (must be after userId is defined)
-    const { addItemToPlaylist, removeItemFromPlaylist, loadPlaylistItems } = usePlaylists();
+
+    // Get userId from authenticated user
+    const userId = ref(null);
+
+    // Update userId when currentUser changes
+    watch(
+      () => currentUser.value,
+      (user) => {
+        // currentUser might be the user object or just the user ID string
+        userId.value = user?._id || user || null;
+      },
+      { immediate: true }
+    );
+
     const { toastMessage, showToast, showToastNotification } = useToast();
     const { triggerPlaylistUpdate } = usePlaylistEvents();
+
+    // Wrapper functions for playlist operations that handle userId being null
+    const getPlaylistComposable = () => {
+      if (!userId.value) {
+        throw new Error("User not authenticated");
+      }
+      return usePlaylists(userId.value);
+    };
 
     const itemId = ref(null);
     const songInfo = ref(null);
@@ -313,18 +340,22 @@ export default {
     // All reviews for this item
     const allReviews = ref([]);
     const otherReviews = computed(() => {
-      if (!allReviews.value || !userId) return [];
+      if (!allReviews.value || !userId.value) return [];
       return allReviews.value;
     });
 
     const hasReview = computed(() => myReview.value !== null);
 
     const loadMyReview = async () => {
+      if (!userId.value) {
+        return; // User not authenticated, skip loading review
+      }
+
       try {
         // see if there is a review for this item and user
         const reviews = await review.getReviewByItemAndUser(
           itemId.value,
-          userId
+          userId.value
         );
         // if no review is found, set the review data to null
         if (!reviews) {
@@ -371,6 +402,34 @@ export default {
               return null;
             }
 
+            const reviewUserId = r.user || r.author;
+
+            // Get username for the reviewer using _getUsername API
+            let username = reviewUserId;
+            if (reviewUserId) {
+              try {
+                const usernameResponse = await auth.getUsername(reviewUserId);
+                // _getUsername returns an array: [{ username: "String" }]
+                if (usernameResponse && !usernameResponse.error) {
+                  if (
+                    Array.isArray(usernameResponse) &&
+                    usernameResponse.length > 0
+                  ) {
+                    username = usernameResponse[0].username || reviewUserId;
+                  } else if (usernameResponse.username) {
+                    username = usernameResponse.username;
+                  }
+                }
+              } catch (err) {
+                console.warn(
+                  `Could not get username for user ${reviewUserId}:`,
+                  err
+                );
+                // Keep the userId as fallback
+                username = reviewUserId;
+              }
+            }
+
             // Load comments for each review
             let comments = [];
             try {
@@ -386,14 +445,11 @@ export default {
                 err
               );
             }
-          
-            // get username from user id
-            const res = await auth.getUsername(r.user);
-            const username = res && res.length > 0 && res[0].username ? res[0].username : r.user;
-            
+
             return {
               id: reviewId,
-              userId: username,
+              userId: reviewUserId,
+              username: username,
               rating: r.rating,
               notes: r.notes || r.text,
               comments: comments,
@@ -456,11 +512,16 @@ export default {
 
       try {
         let newReviewId = null;
+        if (!userId.value) {
+          reviewError.value = "User not authenticated";
+          return;
+        }
+
         if (hasReview.value) {
           // Get the review ID
           const reviewData = await review.getReviewByItemAndUser(
             itemId.value,
-            userId
+            userId.value
           );
 
           if (reviewData && reviewData.error) {
@@ -492,7 +553,7 @@ export default {
           // Create new review
           const result = await review.postReview(
             itemId.value,
-            userId,
+            userId.value,
             parseInt(myRating.value),
             myNotes.value
           );
@@ -602,6 +663,11 @@ export default {
 
     // Add comment to a review
     const handleAddComment = async (reviewId) => {
+      if (!userId.value) {
+        reviewError.value = "User not authenticated";
+        return;
+      }
+
       const commentText = commentInputs.value[reviewId];
       if (!commentText || !commentText.trim()) return;
 
@@ -609,7 +675,7 @@ export default {
         // Add comment to review
         const result = await review.addComment(
           reviewId,
-          userId,
+          userId.value,
           commentText.trim()
         );
 
@@ -724,6 +790,11 @@ export default {
 
     // Toggle item in playlist (add or remove)
     const handleTogglePlaylist = async (playlistName) => {
+      if (!userId.value) {
+        showToastNotification("Error: User not authenticated");
+        return;
+      }
+
       if (!songInfo.value?.externalId && !itemId.value) {
         showToastNotification("Error: Song ID not found");
         return;
@@ -731,21 +802,31 @@ export default {
 
       // Use externalId for playlist operations
       const itemIdToUse = songInfo.value?.externalId || itemId.value;
-      const isInPlaylist = playlistName === "Favorites" ? isInFavorites.value : isInListenLater.value;
+      const isInPlaylist =
+        playlistName === "Favorites"
+          ? isInFavorites.value
+          : isInListenLater.value;
 
       try {
+        const playlistComposable = getPlaylistComposable();
+
         if (isInPlaylist) {
           // Remove from playlist
-          const result = await removeItemFromPlaylist(itemIdToUse, playlistName);
+          const result = await playlistComposable.removeItemFromPlaylist(
+            itemIdToUse,
+            playlistName
+          );
           if (!result.success) {
-            showToastNotification(result.error || `Error removing from ${playlistName}`);
+            showToastNotification(
+              result.error || `Error removing from ${playlistName}`
+            );
             return;
           }
           showToastNotification(`Removed from ${playlistName}`);
-          
+
           // Trigger playlist update event so Home page can refresh
           triggerPlaylistUpdate(playlistName);
-          
+
           if (playlistName === "Favorites") {
             isInFavorites.value = false;
           } else {
@@ -753,11 +834,18 @@ export default {
           }
         } else {
           // Add to playlist
-          const result = await addItemToPlaylist(itemIdToUse, playlistName);
+          const result = await playlistComposable.addItemToPlaylist(
+            itemIdToUse,
+            playlistName
+          );
           if (!result.success) {
             // Format error message to show song name instead of ID
-            let errorMessage = result.error || `Error adding to ${playlistName}`;
-            if (errorMessage.includes("already in playlist") && songInfo.value?.name) {
+            let errorMessage =
+              result.error || `Error adding to ${playlistName}`;
+            if (
+              errorMessage.includes("already in playlist") &&
+              songInfo.value?.name
+            ) {
               // Replace the item ID with the song name in the error message
               // Handles formats like: Item 'ID' or Item "ID" or just the ID
               errorMessage = errorMessage.replace(
@@ -769,10 +857,10 @@ export default {
             return;
           }
           showToastNotification(`Added to ${playlistName}!`);
-          
+
           // Trigger playlist update event so Home page can refresh
           triggerPlaylistUpdate(playlistName);
-          
+
           if (playlistName === "Favorites") {
             isInFavorites.value = true;
           } else {
@@ -787,6 +875,12 @@ export default {
 
     // Load playlist status (check if song is in Favorites or Listen Later)
     const loadPlaylistStatus = async () => {
+      if (!userId.value) {
+        isInFavorites.value = false;
+        isInListenLater.value = false;
+        return;
+      }
+
       if (!songInfo.value?.externalId && !itemId.value) {
         isInFavorites.value = false;
         isInListenLater.value = false;
@@ -796,8 +890,12 @@ export default {
       const itemIdToUse = songInfo.value?.externalId || itemId.value;
 
       try {
+        const playlistComposable = getPlaylistComposable();
+
         // Check Favorites
-        const favoritesResult = await loadPlaylistItems("Favorites");
+        const favoritesResult = await playlistComposable.loadPlaylistItems(
+          "Favorites"
+        );
         if (!favoritesResult.error) {
           isInFavorites.value = favoritesResult.items.some(
             (item) => item.item === itemIdToUse
@@ -805,7 +903,9 @@ export default {
         }
 
         // Check Listen Later
-        const listenLaterResult = await loadPlaylistItems("Listen Later");
+        const listenLaterResult = await playlistComposable.loadPlaylistItems(
+          "Listen Later"
+        );
         if (!listenLaterResult.error) {
           isInListenLater.value = listenLaterResult.items.some(
             (item) => item.item === itemIdToUse
@@ -834,7 +934,7 @@ export default {
 
     return {
       itemId,
-      userId,
+      userId: computed(() => userId.value),
       songInfo,
       loading,
       loadingReviews,
@@ -858,8 +958,6 @@ export default {
       handleDeleteReview,
       handleTogglePlaylist,
       formatReleaseDate,
-      isInFavorites,
-      isInListenLater,
       commentInputs,
       handleAddComment,
       handleDeleteComment,

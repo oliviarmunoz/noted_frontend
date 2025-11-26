@@ -129,6 +129,9 @@ export const musicDiscovery = {
   getSearchResults: (user) =>
     apiCall("/api/MusicDiscovery/_getSearchResults", { user }),
 
+  getEntity: (id) =>
+    apiCall("/api/MusicDiscovery/_getEntity", { id }),
+
   getEntityFromId: (externalId) =>
     apiCall("/api/MusicDiscovery/_getEntityFromId", { externalId }),
 

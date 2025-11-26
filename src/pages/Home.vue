@@ -137,13 +137,44 @@
             </span>
           </div>
           <p class="review-comment">{{ review.comment }}</p>
-          <div class="comment-input">
+          <div
+            class="comments-section"
+            v-if="review.comments && review.comments.length > 0"
+          >
+            <div
+              class="comment-item"
+              v-for="comment in review.comments"
+              :key="comment.commentId"
+            >
+              <span class="comment-user"
+                >{{ comment.commenterUsername || comment.commenter }}:</span
+              >
+              <span class="comment-text">{{ comment.notes }}</span>
+              <button
+                v-if="comment.commenter === userId"
+                @click="handleDeleteComment(review.id, comment.commentId)"
+                class="delete-comment-btn"
+                title="Delete comment"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+          <div class="comment-input" v-if="review && review.id">
             <span class="comment-icon">👤</span>
             <input
               type="text"
               placeholder="Leave a comment"
               class="comment-field"
+              v-model="commentInputs[review.id]"
+              @keyup.enter="handleAddComment(review.id)"
             />
+            <button
+              @click="handleAddComment(review.id)"
+              class="comment-submit-btn"
+            >
+              Post
+            </button>
           </div>
         </div>
       </main>
@@ -202,8 +233,7 @@ export default {
       favoritesError.value = null;
 
       try {
-        const playlistComposable = getPlaylistComposable();
-        const result = await playlistComposable.loadPlaylistItems("Favorites");
+        const result = await loadPlaylistItems("Favorites");
         if (result.error) {
           favoritesError.value = result.error;
           favoritesItems.value = [];
@@ -357,10 +387,7 @@ export default {
       listenLaterError.value = null;
 
       try {
-        const playlistComposable = getPlaylistComposable();
-        const result = await playlistComposable.loadPlaylistItems(
-          "Listen Later"
-        );
+        const result = await loadPlaylistItems("Listen Later");
         if (result.error) {
           listenLaterError.value = result.error;
           listenLaterItems.value = [];
@@ -548,11 +575,7 @@ export default {
       }
 
       try {
-        const playlistComposable = getPlaylistComposable();
-        const result = await playlistComposable.removeItemFromPlaylist(
-          item.item,
-          playlistName
-        );
+        const result = await removeItemFromPlaylist(item.item, playlistName);
 
         if (!result.success) {
           showToastNotification(
@@ -610,6 +633,8 @@ export default {
       navigateFromFeed,
       removeFromPlaylist,
       getUserId,
+      userId: computed(() => userId.value),
+      showToastNotification,
     };
   },
   data() {
@@ -617,12 +642,55 @@ export default {
       reviews: [],
       loading: true,
       error: null,
+      commentInputs: {},
     };
   },
   async mounted() {
     await this.loadFeed();
   },
   methods: {
+    // Helper method to enhance comments with usernames
+    async enhanceCommentsWithUsernames(comments) {
+      if (!comments || !Array.isArray(comments)) {
+        return [];
+      }
+
+      return await Promise.all(
+        comments.map(async (comment) => {
+          let commenterUsername = comment.commenter;
+          if (comment.commenter) {
+            try {
+              const usernameResponse = await auth.getUsername(
+                comment.commenter
+              );
+              // _getUsername returns an array: [{ username: "String" }]
+              if (usernameResponse && !usernameResponse.error) {
+                if (
+                  Array.isArray(usernameResponse) &&
+                  usernameResponse.length > 0
+                ) {
+                  commenterUsername =
+                    usernameResponse[0].username || comment.commenter;
+                } else if (usernameResponse.username) {
+                  commenterUsername = usernameResponse.username;
+                }
+              }
+            } catch (err) {
+              console.warn(
+                `Could not get username for commenter ${comment.commenter}:`,
+                err
+              );
+              // Keep the commenter ID as fallback
+              commenterUsername = comment.commenter;
+            }
+          }
+          return {
+            ...comment,
+            commenterUsername: commenterUsername,
+          };
+        })
+      );
+    },
     async loadFeed() {
       this.loading = true;
       this.error = null;
@@ -751,9 +819,44 @@ export default {
                 const songAlbum =
                   musicEntity?.album || musicEntity?.albumName || null;
 
+                // Get review ID
+                const reviewId = reviewData.review || reviewData._id;
+                console.log("Review data structure:", {
+                  reviewData,
+                  reviewId,
+                  reviewField: reviewData.review,
+                  _idField: reviewData._id,
+                });
+
+                // Load comments for this review
+                let comments = [];
+                if (reviewId) {
+                  try {
+                    const reviewComments = await review.getReviewComments(
+                      reviewId
+                    );
+                    if (reviewComments && reviewComments.error) {
+                      console.error(
+                        `Error loading comments:`,
+                        reviewComments.error
+                      );
+                    } else {
+                      // Enhance comments with usernames
+                      comments = await this.enhanceCommentsWithUsernames(
+                        reviewComments || []
+                      );
+                    }
+                  } catch (err) {
+                    console.error(
+                      `Error loading comments for review ${reviewId}:`,
+                      err
+                    );
+                  }
+                }
+
                 // Push review with complete music entity information
                 allReviews.push({
-                  id: reviewData.review,
+                  id: reviewId,
                   reviewer: reviewerName,
                   song: songName,
                   artist: songArtist,
@@ -766,6 +869,7 @@ export default {
                   uri: songUri,
                   item: target, // Keep for backward compatibility
                   musicEntity: musicEntity,
+                  comments: comments,
                 });
               } catch (err) {
                 console.warn(
@@ -786,6 +890,121 @@ export default {
         this.error = err.message || "Failed to load feed";
       } finally {
         this.loading = false;
+      }
+    },
+    async handleAddComment(reviewId) {
+      if (!reviewId) {
+        console.error("handleAddComment: reviewId is missing", reviewId);
+        this.showToastNotification("Error: Review ID not found");
+        return;
+      }
+
+      const currentUser = this.getUserId();
+      if (!currentUser) {
+        this.showToastNotification("Error: User not authenticated");
+        return;
+      }
+
+      const commentText = this.commentInputs[reviewId];
+      if (!commentText || !commentText.trim()) {
+        console.warn("handleAddComment: comment text is empty");
+        return;
+      }
+
+      console.log("handleAddComment called with:", {
+        reviewId,
+        reviewIdType: typeof reviewId,
+        currentUser,
+        currentUserType: typeof currentUser,
+        commentText: commentText.trim(),
+        commentInputs: this.commentInputs,
+      });
+
+      try {
+        // Add comment to review
+        const result = await review.addComment(
+          reviewId,
+          currentUser,
+          commentText.trim()
+        );
+        console.log("addComment result:", result);
+
+        if (result && result.error) {
+          this.showToastNotification(result.error);
+          return;
+        }
+
+        // Clear the input
+        this.commentInputs[reviewId] = "";
+
+        // Reload comments for this review
+        const targetReview = this.reviews.find((r) => r.id === reviewId);
+        if (targetReview) {
+          try {
+            const updatedComments = await review.getReviewComments(reviewId);
+            if (updatedComments && updatedComments.error) {
+              console.error(`Error reloading comments:`, updatedComments.error);
+            } else {
+              // Enhance comments with usernames
+              targetReview.comments = await this.enhanceCommentsWithUsernames(
+                updatedComments || []
+              );
+            }
+          } catch (err) {
+            console.error(
+              `Error reloading comments for review ${reviewId}:`,
+              err
+            );
+            // Reload entire feed if single review reload fails
+            await this.loadFeed();
+          }
+        }
+      } catch (err) {
+        console.error("Error adding comment:", err);
+        this.showToastNotification(err.message || "Failed to add comment");
+      }
+    },
+    async handleDeleteComment(reviewId, commentId) {
+      const currentUser = this.getUserId();
+      if (!currentUser) {
+        this.showToastNotification("Error: User not authenticated");
+        return;
+      }
+
+      try {
+        // Delete comment
+        const result = await review.deleteComment(reviewId, commentId);
+
+        if (result && result.error) {
+          this.showToastNotification(result.error);
+          return;
+        }
+
+        // Reload comments for this review
+        const targetReview = this.reviews.find((r) => r.id === reviewId);
+        if (targetReview) {
+          try {
+            const updatedComments = await review.getReviewComments(reviewId);
+            if (updatedComments && updatedComments.error) {
+              console.error(`Error reloading comments:`, updatedComments.error);
+            } else {
+              // Enhance comments with usernames
+              targetReview.comments = await this.enhanceCommentsWithUsernames(
+                updatedComments || []
+              );
+            }
+          } catch (err) {
+            console.error(
+              `Error reloading comments for review ${reviewId}:`,
+              err
+            );
+            // Reload entire feed if single review reload fails
+            await this.loadFeed();
+          }
+        }
+      } catch (err) {
+        console.error("Error deleting comment:", err);
+        this.showToastNotification(err.message || "Failed to delete comment");
       }
     },
   },
@@ -1114,6 +1333,70 @@ export default {
 
 .comment-field::placeholder {
   color: #4a5568;
+}
+
+.comments-section {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(123, 140, 168, 0.1);
+}
+
+.comment-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  padding: 0.75rem;
+  background: rgba(10, 14, 26, 0.6);
+  border-radius: 4px;
+}
+
+.comment-user {
+  color: #4a9eff;
+  font-weight: 600;
+  margin-right: 0.5rem;
+}
+
+.comment-text {
+  flex: 1;
+  color: #7b8ca8;
+}
+
+.delete-comment-btn {
+  background: transparent;
+  border: none;
+  color: #ff6b9d;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 2px;
+  transition: all 0.2s ease;
+}
+
+.delete-comment-btn:hover {
+  background: rgba(255, 107, 157, 0.1);
+  color: #ff6b9d;
+}
+
+.comment-submit-btn {
+  padding: 0.5rem 1rem;
+  background: rgba(74, 158, 255, 0.1);
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  border-radius: 4px;
+  color: #4a9eff;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.comment-submit-btn:hover {
+  background: rgba(74, 158, 255, 0.2);
+  border-color: #4a9eff;
 }
 
 .loading,

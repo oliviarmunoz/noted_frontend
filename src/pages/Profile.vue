@@ -34,8 +34,12 @@
         <!-- Reviews Section -->
         <section class="profile-section">
           <h2 class="section-title">REVIEWS</h2>
-          <div v-if="loadingReviews" class="loading-text">Loading reviews...</div>
-          <div v-else-if="reviewsError" class="error-text">{{ reviewsError }}</div>
+          <div v-if="loadingReviews" class="loading-text">
+            Loading reviews...
+          </div>
+          <div v-else-if="reviewsError" class="error-text">
+            {{ reviewsError }}
+          </div>
           <div v-else-if="reviews.length === 0" class="empty-message">
             No reviews yet
           </div>
@@ -44,11 +48,25 @@
               v-for="review in reviews"
               :key="review.review"
               class="review-item"
+              @click="navigateToReview(review)"
             >
-              <div class="review-item-content" @click="navigateToReview(review)">
+              <img
+                v-if="review.imageUrl"
+                :src="review.imageUrl"
+                :alt="review.songName"
+                class="review-album-cover"
+              />
+              <div v-else class="review-album-cover-placeholder">
+                {{ review.songName?.charAt(0) || "?" }}
+              </div>
+              <div class="review-content-details">
                 <div class="review-song-info">
-                  <div class="review-song-name">{{ review.songName || "Unknown Song" }}</div>
-                  <div class="review-song-artist">{{ review.songArtist || "Unknown Artist" }}</div>
+                  <div class="review-song-name">
+                    {{ review.songName || "Unknown Song" }}
+                  </div>
+                  <div class="review-song-artist">
+                    {{ review.songArtist || "Unknown Artist" }}
+                  </div>
                 </div>
                 <div class="review-rating">
                   <span
@@ -60,15 +78,10 @@
                     ★
                   </span>
                 </div>
-                <p v-if="review.text" class="review-text">{{ review.text }}</p>
+                <p v-if="review.text" class="review-text">
+                  {{ review.text }}
+                </p>
               </div>
-              <button
-                class="delete-review-btn"
-                @click.stop="handleDeleteReview(review)"
-                title="Delete review"
-              >
-                ×
-              </button>
             </div>
           </div>
         </section>
@@ -79,14 +92,19 @@
           <section class="profile-section playlist-section">
             <h2 class="section-title">FAVORITES</h2>
             <div v-if="loadingFavorites" class="loading-text">Loading...</div>
-            <div v-else-if="favoritesError" class="error-text">{{ favoritesError }}</div>
+            <div v-else-if="favoritesError" class="error-text">
+              {{ favoritesError }}
+            </div>
             <ul v-else class="song-list">
               <li
                 v-for="item in favoritesItems"
                 :key="item.item"
                 class="song-item"
               >
-                <div class="song-item-content" @click="navigateToReviewFromItem(item)">
+                <div
+                  class="song-item-content"
+                  @click="navigateToReviewFromItem(item)"
+                >
                   <img
                     v-if="item.imageUrl"
                     :src="item.imageUrl"
@@ -119,14 +137,19 @@
           <section class="profile-section playlist-section">
             <h2 class="section-title">LISTEN LATER</h2>
             <div v-if="loadingListenLater" class="loading-text">Loading...</div>
-            <div v-else-if="listenLaterError" class="error-text">{{ listenLaterError }}</div>
+            <div v-else-if="listenLaterError" class="error-text">
+              {{ listenLaterError }}
+            </div>
             <ul v-else class="song-list">
               <li
                 v-for="item in listenLaterItems"
                 :key="item.item"
                 class="song-item"
               >
-                <div class="song-item-content" @click="navigateToReviewFromItem(item)">
+                <div
+                  class="song-item-content"
+                  @click="navigateToReviewFromItem(item)"
+                >
                   <img
                     v-if="item.imageUrl"
                     :src="item.imageUrl"
@@ -160,17 +183,27 @@
         <section class="profile-section">
           <div class="friends-header">
             <h2 class="section-title">FRIENDS</h2>
-            <button class="add-friend-btn" @click="showAddFriendModal = true" title="Add friend">
+            <button
+              class="add-friend-btn"
+              @click="showAddFriendModal = true"
+              title="Add friend"
+            >
               + Add Friend
             </button>
           </div>
 
           <!-- Add Friend Modal -->
-          <div v-if="showAddFriendModal" class="modal-overlay" @click="showAddFriendModal = false">
+          <div
+            v-if="showAddFriendModal"
+            class="modal-overlay"
+            @click="showAddFriendModal = false"
+          >
             <div class="modal-content" @click.stop>
               <div class="modal-header">
                 <h3>Add Friend</h3>
-                <button class="modal-close" @click="showAddFriendModal = false">×</button>
+                <button class="modal-close" @click="showAddFriendModal = false">
+                  ×
+                </button>
               </div>
               <div class="modal-body">
                 <input
@@ -184,12 +217,16 @@
                   class="send-request-btn"
                   @click="searchUser"
                   :disabled="searchingUser || !friendSearchQuery.trim()"
-                  style="width: 100%; margin-top: 0.5rem;"
+                  style="width: 100%; margin-top: 0.5rem"
                 >
                   {{ searchingUser ? "Searching..." : "Search" }}
                 </button>
-                <div v-if="searchingUser" class="loading-text">Searching...</div>
-                <div v-if="userSearchError" class="error-text">{{ userSearchError }}</div>
+                <div v-if="searchingUser" class="loading-text">
+                  Searching...
+                </div>
+                <div v-if="userSearchError" class="error-text">
+                  {{ userSearchError }}
+                </div>
                 <div v-if="searchedUser" class="searched-user">
                   <div class="searched-user-info">
                     <div class="friend-avatar">
@@ -212,7 +249,10 @@
           </div>
 
           <!-- Incoming Friend Requests -->
-          <div v-if="incomingRequests.length > 0" class="friend-requests-section">
+          <div
+            v-if="incomingRequests.length > 0"
+            class="friend-requests-section"
+          >
             <h3 class="subsection-title">Incoming Requests</h3>
             <div class="friends-list">
               <div
@@ -224,9 +264,8 @@
                   <span class="friend-icon">👤</span>
                 </div>
                 <div class="friend-info">
-                  <div class="friend-name">{{ request.requesterName || request.requester }}</div>
-                  <div class="friend-username" v-if="request.requesterName && request.requesterName !== request.requester">
-                    {{ request.requester }}
+                  <div class="friend-name">
+                    {{ request.requesterName || request.requester }}
                   </div>
                 </div>
                 <div class="friend-actions">
@@ -252,7 +291,10 @@
           </div>
 
           <!-- Outgoing Friend Requests -->
-          <div v-if="outgoingRequests.length > 0" class="friend-requests-section">
+          <div
+            v-if="outgoingRequests.length > 0"
+            class="friend-requests-section"
+          >
             <h3 class="subsection-title">Outgoing Requests</h3>
             <div class="friends-list">
               <div
@@ -264,9 +306,8 @@
                   <span class="friend-icon">👤</span>
                 </div>
                 <div class="friend-info">
-                  <div class="friend-name">{{ request.targetName || request.target }}</div>
-                  <div class="friend-username" v-if="request.targetName && request.targetName !== request.target">
-                    {{ request.target }}
+                  <div class="friend-name">
+                    {{ request.targetName || request.target }}
                   </div>
                 </div>
                 <div class="friend-actions">
@@ -284,9 +325,20 @@
           </div>
 
           <!-- Current Friends -->
-          <div v-if="loadingFriends" class="loading-text">Loading friends...</div>
-          <div v-else-if="friendsError" class="error-text">{{ friendsError }}</div>
-          <div v-else-if="friends.length === 0 && incomingRequests.length === 0 && outgoingRequests.length === 0" class="empty-message">
+          <div v-if="loadingFriends" class="loading-text">
+            Loading friends...
+          </div>
+          <div v-else-if="friendsError" class="error-text">
+            {{ friendsError }}
+          </div>
+          <div
+            v-else-if="
+              friends.length === 0 &&
+              incomingRequests.length === 0 &&
+              outgoingRequests.length === 0
+            "
+            class="empty-message"
+          >
             No friends yet. Add friends to get started!
           </div>
           <div v-else-if="friends.length > 0" class="friend-requests-section">
@@ -301,9 +353,8 @@
                   <span class="friend-icon">👤</span>
                 </div>
                 <div class="friend-info">
-                  <div class="friend-name">{{ friend.friendName || friend.friend }}</div>
-                  <div class="friend-username" v-if="friend.friendName && friend.friendName !== friend.friend">
-                    {{ friend.friend }}
+                  <div class="friend-name">
+                    {{ friend.friendName || friend.friend }}
                   </div>
                 </div>
                 <div class="friend-actions">
@@ -328,7 +379,7 @@
 <script>
 import { ref, onMounted, watch, computed } from "vue";
 import { useRouter } from "vue-router";
-import { review, friending, auth } from "../api/api.js";
+import { review, friending, auth, musicDiscovery } from "../api/api.js";
 import { useEntities } from "../composables/useEntities.js";
 import { usePlaylists } from "../composables/usePlaylists.js";
 import { usePlaylistEvents } from "../composables/usePlaylistEvents.js";
@@ -340,10 +391,10 @@ export default {
   setup() {
     const router = useRouter();
     const { currentUser } = useAuth();
-    
+
     // Get userId from authenticated user
     const userId = ref(null);
-    
+
     // Update userId when currentUser changes
     watch(
       () => currentUser.value,
@@ -353,7 +404,7 @@ export default {
       },
       { immediate: true }
     );
-    
+
     const username = ref("");
     const reviews = ref([]);
     const favoritesItems = ref([]);
@@ -361,18 +412,18 @@ export default {
     const friends = ref([]);
     const incomingRequests = ref([]);
     const outgoingRequests = ref([]);
-    
+
     const loadingReviews = ref(false);
     const loadingFavorites = ref(false);
     const loadingListenLater = ref(false);
     const loadingFriends = ref(false);
     const loadingRequests = ref(false);
-    
+
     const reviewsError = ref(null);
     const favoritesError = ref(null);
     const listenLaterError = ref(null);
     const friendsError = ref(null);
-    
+
     // Friend search and add modal
     const showAddFriendModal = ref(false);
     const friendSearchQuery = ref("");
@@ -383,7 +434,7 @@ export default {
     const processingRequest = ref(false);
 
     const { loadEntityByExternalId } = useEntities();
-    
+
     // usePlaylists needs a string userId, create wrapper functions that use userId.value
     const loadPlaylistItemsWrapper = async (playlistName) => {
       if (!userId.value) {
@@ -392,15 +443,18 @@ export default {
       const playlistComposable = usePlaylists();
       return await playlistComposable.loadPlaylistItems(playlistName);
     };
-    
+
     const removeItemFromPlaylistWrapper = async (itemId, playlistName) => {
       if (!userId.value) {
         return { success: false, error: "User not authenticated" };
       }
       const playlistComposable = usePlaylists();
-      return await playlistComposable.removeItemFromPlaylist(itemId, playlistName);
+      return await playlistComposable.removeItemFromPlaylist(
+        itemId,
+        playlistName
+      );
     };
-    
+
     const loadPlaylistItems = loadPlaylistItemsWrapper;
     const removeItemFromPlaylist = removeItemFromPlaylistWrapper;
     const { playlistUpdateEvent } = usePlaylistEvents();
@@ -413,21 +467,20 @@ export default {
           username.value = "User";
           return;
         }
-        
+
         const result = await auth.getUsername(userId.value);
         console.log("[Profile] getUsername API response:", result);
-        
+
         if (result && result.error) {
           console.error("[Profile] Error loading username:", result.error);
           username.value = "User";
           return;
         }
-        
+
         // API returns an array: [{ "username": "String" }]
-        const usernameData = Array.isArray(result) && result.length > 0 
-          ? result[0] 
-          : result;
-        
+        const usernameData =
+          Array.isArray(result) && result.length > 0 ? result[0] : result;
+
         if (usernameData && usernameData.username) {
           username.value = usernameData.username;
         } else {
@@ -447,24 +500,103 @@ export default {
 
       try {
         const result = await review.getUserReviews(userId.value);
-        
+
         if (result && result.error) {
           reviewsError.value = result.error;
           reviews.value = [];
           return;
         }
 
+        const userReviews = result || [];
+
         // Load entity details for each review
         const reviewsWithDetails = await Promise.all(
-          (result || []).map(async (reviewItem) => {
-            // The target is the externalId (Spotify ID)
-            const entity = await loadEntityByExternalId(reviewItem.target);
-            return {
-              ...reviewItem,
-              songName: entity.name,
-              songArtist: entity.artist,
-              songUri: entity.uri,
-            };
+          userReviews.map(async (reviewData) => {
+            try {
+              // Get the target from the review (matching Home.vue logic)
+              const target = reviewData.target || reviewData.item;
+              let musicEntity = null;
+
+              // Get the music entity information using getEntity with the target
+              if (target) {
+                try {
+                  const entityResponse = await musicDiscovery.getEntity(target);
+
+                  if (entityResponse && entityResponse.error) {
+                    console.warn(
+                      `Error loading entity for target ${target}:`,
+                      entityResponse.error
+                    );
+                  } else if (entityResponse) {
+                    // Extract musicEntity from the response
+                    // According to API spec, _getEntityFromId returns:
+                    // [{ "musicEntity": {...} }]
+                    if (
+                      Array.isArray(entityResponse) &&
+                      entityResponse.length > 0
+                    ) {
+                      // Response is an array, get first element
+                      const firstResponse = entityResponse[0];
+                      musicEntity = firstResponse.musicEntity || firstResponse;
+                    } else if (entityResponse.musicEntity) {
+                      // Response has musicEntity property
+                      musicEntity = entityResponse.musicEntity;
+                    } else if (
+                      entityResponse._id ||
+                      entityResponse.name ||
+                      entityResponse.externalId
+                    ) {
+                      // Response is the entity directly (fallback)
+                      musicEntity = entityResponse;
+                    }
+                  }
+                } catch (e) {
+                  console.warn(
+                    `Error getting entity info for target ${target}:`,
+                    e
+                  );
+                }
+              }
+
+              // Extract URI and other info from musicEntity
+              const songUri =
+                musicEntity?.uri || musicEntity?.externalId || target;
+              const songName = musicEntity?.name || "Unknown Song";
+              const songArtist =
+                musicEntity?.artistName ||
+                musicEntity?.artist ||
+                "Unknown Artist";
+              const songImageUrl = musicEntity?.imageUrl || null;
+              const songAlbum =
+                musicEntity?.album || musicEntity?.albumName || null;
+
+              return {
+                ...reviewData,
+                review: reviewData.review,
+                songName: songName,
+                songArtist: songArtist,
+                songUri: songUri,
+                uri: songUri,
+                imageUrl: songImageUrl,
+                album: songAlbum,
+                // Ensure text/notes field is properly set (API returns "text" for _getUserReviews)
+                text: reviewData.text || reviewData.notes || "",
+                rating: reviewData.rating || 0,
+              };
+            } catch (err) {
+              console.warn(
+                `Error processing review ${reviewData.review}:`,
+                err
+              );
+              // Return review with minimal info if entity loading fails
+              return {
+                ...reviewData,
+                songName: "Unknown Song",
+                songArtist: "Unknown Artist",
+                text: reviewData.text || reviewData.notes || "",
+                rating: reviewData.rating || 0,
+              };
+            }
           })
         );
 
@@ -531,14 +663,16 @@ export default {
 
       try {
         const result = await removeItemFromPlaylist(item.item, playlistName);
-        
+
         if (!result.success) {
-          showToastNotification(result.error || `Error removing from ${playlistName}`);
+          showToastNotification(
+            result.error || `Error removing from ${playlistName}`
+          );
           return;
         }
 
         showToastNotification(`Removed from ${playlistName}`);
-        
+
         // Reload the playlist
         if (playlistName === "Favorites") {
           await loadFavorites();
@@ -558,7 +692,7 @@ export default {
 
       try {
         const result = await friending.getFriends(userId.value);
-        
+
         if (result && result.error) {
           friendsError.value = result.error;
           friends.value = [];
@@ -571,18 +705,23 @@ export default {
             try {
               const usernameResult = await auth.getUsername(friendItem.friend);
               // API returns an array: [{ "username": "String" }]
-              const usernameData = Array.isArray(usernameResult) && usernameResult.length > 0 
-                ? usernameResult[0] 
-                : usernameResult;
-              const username = usernameData && !usernameData.error && usernameData.username
-                ? usernameData.username
-                : friendItem.friend;
+              const usernameData =
+                Array.isArray(usernameResult) && usernameResult.length > 0
+                  ? usernameResult[0]
+                  : usernameResult;
+              const username =
+                usernameData && !usernameData.error && usernameData.username
+                  ? usernameData.username
+                  : friendItem.friend;
               return {
                 ...friendItem,
                 friendName: username,
               };
             } catch (error) {
-              console.error(`[Profile] Error loading username for friend ${friendItem.friend}:`, error);
+              console.error(
+                `[Profile] Error loading username for friend ${friendItem.friend}:`,
+                error
+              );
               return {
                 ...friendItem,
                 friendName: friendItem.friend,
@@ -607,25 +746,34 @@ export default {
 
       try {
         // Load incoming requests
-        const incomingResult = await friending.getIncomingRequests(userId.value);
+        const incomingResult = await friending.getIncomingRequests(
+          userId.value
+        );
         if (incomingResult && !incomingResult.error) {
           const incomingWithNames = await Promise.all(
             (incomingResult || []).map(async (request) => {
               try {
-                const usernameResult = await auth.getUsername(request.requester);
+                const usernameResult = await auth.getUsername(
+                  request.requester
+                );
                 // API returns an array: [{ "username": "String" }]
-                const usernameData = Array.isArray(usernameResult) && usernameResult.length > 0 
-                  ? usernameResult[0] 
-                  : usernameResult;
-                const username = usernameData && !usernameData.error && usernameData.username
-                  ? usernameData.username
-                  : request.requester;
+                const usernameData =
+                  Array.isArray(usernameResult) && usernameResult.length > 0
+                    ? usernameResult[0]
+                    : usernameResult;
+                const username =
+                  usernameData && !usernameData.error && usernameData.username
+                    ? usernameData.username
+                    : request.requester;
                 return {
                   ...request,
                   requesterName: username,
                 };
               } catch (error) {
-                console.error(`[Profile] Error loading username for requester ${request.requester}:`, error);
+                console.error(
+                  `[Profile] Error loading username for requester ${request.requester}:`,
+                  error
+                );
                 return {
                   ...request,
                   requesterName: request.requester,
@@ -639,25 +787,32 @@ export default {
         }
 
         // Load outgoing requests
-        const outgoingResult = await friending.getOutgoingRequests(userId.value);
+        const outgoingResult = await friending.getOutgoingRequests(
+          userId.value
+        );
         if (outgoingResult && !outgoingResult.error) {
           const outgoingWithNames = await Promise.all(
             (outgoingResult || []).map(async (request) => {
               try {
                 const usernameResult = await auth.getUsername(request.target);
                 // API returns an array: [{ "username": "String" }]
-                const usernameData = Array.isArray(usernameResult) && usernameResult.length > 0 
-                  ? usernameResult[0] 
-                  : usernameResult;
-                const username = usernameData && !usernameData.error && usernameData.username
-                  ? usernameData.username
-                  : request.target;
+                const usernameData =
+                  Array.isArray(usernameResult) && usernameResult.length > 0
+                    ? usernameResult[0]
+                    : usernameResult;
+                const username =
+                  usernameData && !usernameData.error && usernameData.username
+                    ? usernameData.username
+                    : request.target;
                 return {
                   ...request,
                   targetName: username,
                 };
               } catch (error) {
-                console.error(`[Profile] Error loading username for target ${request.target}:`, error);
+                console.error(
+                  `[Profile] Error loading username for target ${request.target}:`,
+                  error
+                );
                 return {
                   ...request,
                   targetName: request.target,
@@ -682,7 +837,7 @@ export default {
     const searchUser = async () => {
       const searchQuery = friendSearchQuery.value.trim();
       console.log("[Profile] Searching for user:", searchQuery);
-      
+
       if (!searchQuery) {
         userSearchError.value = "Please enter a username";
         return;
@@ -693,10 +848,13 @@ export default {
       searchedUser.value = null;
 
       try {
-        console.log("[Profile] Calling getUserByUsername API with:", searchQuery);
+        console.log(
+          "[Profile] Calling getUserByUsername API with:",
+          searchQuery
+        );
         const result = await auth.getUserByUsername(searchQuery);
         console.log("[Profile] getUserByUsername API response:", result);
-        
+
         if (result && result.error) {
           console.log("[Profile] API returned error:", result.error);
           userSearchError.value = result.error || "User not found";
@@ -705,12 +863,13 @@ export default {
         }
 
         // API returns an array: [{ "user": "User" }]
-        const userData = Array.isArray(result) && result.length > 0 ? result[0] : result;
+        const userData =
+          Array.isArray(result) && result.length > 0 ? result[0] : result;
         const foundUserId = userData?.user;
 
         if (foundUserId) {
           console.log("[Profile] User found:", foundUserId);
-          
+
           // Check if it's the current user
           if (foundUserId === userId.value) {
             console.log("[Profile] User tried to add themselves");
@@ -720,7 +879,7 @@ export default {
           }
 
           // Check if already friends
-          const isFriend = friends.value.some(f => f.friend === foundUserId);
+          const isFriend = friends.value.some((f) => f.friend === foundUserId);
           if (isFriend) {
             console.log("[Profile] User is already a friend");
             userSearchError.value = "You are already friends with this user";
@@ -729,8 +888,12 @@ export default {
           }
 
           // Check if there's a pending request
-          const hasIncomingRequest = incomingRequests.value.some(r => r.requester === foundUserId);
-          const hasOutgoingRequest = outgoingRequests.value.some(r => r.target === foundUserId);
+          const hasIncomingRequest = incomingRequests.value.some(
+            (r) => r.requester === foundUserId
+          );
+          const hasOutgoingRequest = outgoingRequests.value.some(
+            (r) => r.target === foundUserId
+          );
           if (hasIncomingRequest || hasOutgoingRequest) {
             console.log("[Profile] Pending request exists");
             userSearchError.value = "There is already a pending friend request";
@@ -744,7 +907,10 @@ export default {
             username: searchQuery,
           };
         } else {
-          console.log("[Profile] User not found in result. Result structure:", result);
+          console.log(
+            "[Profile] User not found in result. Result structure:",
+            result
+          );
           userSearchError.value = "User not found";
           searchedUser.value = null;
         }
@@ -769,10 +935,14 @@ export default {
       userSearchError.value = null;
 
       try {
-        const result = await friending.sendFriendRequest(userId.value, searchedUser.value.user);
-        
+        const result = await friending.sendFriendRequest(
+          userId.value,
+          searchedUser.value.user
+        );
+
         if (result && result.error) {
-          userSearchError.value = result.error || "Failed to send friend request";
+          userSearchError.value =
+            result.error || "Failed to send friend request";
           return;
         }
 
@@ -780,12 +950,13 @@ export default {
         showAddFriendModal.value = false;
         friendSearchQuery.value = "";
         searchedUser.value = null;
-        
+
         // Reload requests
         await loadFriendRequests();
       } catch (error) {
         console.error("[Profile] Error sending friend request:", error);
-        userSearchError.value = error.message || "Failed to send friend request";
+        userSearchError.value =
+          error.message || "Failed to send friend request";
       } finally {
         sendingRequest.value = false;
       }
@@ -796,20 +967,27 @@ export default {
       processingRequest.value = true;
 
       try {
-        const result = await friending.acceptFriendRequest(request.requester, userId.value);
-        
+        const result = await friending.acceptFriendRequest(
+          request.requester,
+          userId.value
+        );
+
         if (result && result.error) {
-          showToastNotification(result.error || "Failed to accept friend request");
+          showToastNotification(
+            result.error || "Failed to accept friend request"
+          );
           return;
         }
 
         showToastNotification("Friend request accepted!");
-        
+
         // Reload friends and requests
         await Promise.all([loadFriends(), loadFriendRequests()]);
       } catch (error) {
         console.error("[Profile] Error accepting friend request:", error);
-        showToastNotification(error.message || "Failed to accept friend request");
+        showToastNotification(
+          error.message || "Failed to accept friend request"
+        );
       } finally {
         processingRequest.value = false;
       }
@@ -820,20 +998,27 @@ export default {
       processingRequest.value = true;
 
       try {
-        const result = await friending.removeFriendRequest(request.requester, userId.value);
-        
+        const result = await friending.removeFriendRequest(
+          request.requester,
+          userId.value
+        );
+
         if (result && result.error) {
-          showToastNotification(result.error || "Failed to decline friend request");
+          showToastNotification(
+            result.error || "Failed to decline friend request"
+          );
           return;
         }
 
         showToastNotification("Friend request declined");
-        
+
         // Reload requests
         await loadFriendRequests();
       } catch (error) {
         console.error("[Profile] Error declining friend request:", error);
-        showToastNotification(error.message || "Failed to decline friend request");
+        showToastNotification(
+          error.message || "Failed to decline friend request"
+        );
       } finally {
         processingRequest.value = false;
       }
@@ -844,20 +1029,27 @@ export default {
       processingRequest.value = true;
 
       try {
-        const result = await friending.removeFriendRequest(userId.value, request.target);
-        
+        const result = await friending.removeFriendRequest(
+          userId.value,
+          request.target
+        );
+
         if (result && result.error) {
-          showToastNotification(result.error || "Failed to cancel friend request");
+          showToastNotification(
+            result.error || "Failed to cancel friend request"
+          );
           return;
         }
 
         showToastNotification("Friend request cancelled");
-        
+
         // Reload requests
         await loadFriendRequests();
       } catch (error) {
         console.error("[Profile] Error cancelling friend request:", error);
-        showToastNotification(error.message || "Failed to cancel friend request");
+        showToastNotification(
+          error.message || "Failed to cancel friend request"
+        );
       } finally {
         processingRequest.value = false;
       }
@@ -865,22 +1057,31 @@ export default {
 
     // Remove friend
     const handleRemoveFriend = async (friend) => {
-      if (!confirm(`Are you sure you want to remove ${friend.friendName || friend.friend} as a friend?`)) {
+      if (
+        !confirm(
+          `Are you sure you want to remove ${
+            friend.friendName || friend.friend
+          } as a friend?`
+        )
+      ) {
         return;
       }
 
       processingRequest.value = true;
 
       try {
-        const result = await friending.removeFriend(userId.value, friend.friend);
-        
+        const result = await friending.removeFriend(
+          userId.value,
+          friend.friend
+        );
+
         if (result && result.error) {
           showToastNotification(result.error || "Failed to remove friend");
           return;
         }
 
         showToastNotification("Friend removed");
-        
+
         // Reload friends
         await loadFriends();
       } catch (error) {
@@ -929,16 +1130,18 @@ export default {
 
       try {
         const result = await review.deleteReview(reviewItem.review);
-        
+
         if (result && result.error) {
           showToastNotification(result.error || "Failed to delete review");
           return;
         }
 
         showToastNotification("Review deleted successfully");
-        
+
         // Remove the review from the list
-        reviews.value = reviews.value.filter(r => r.review !== reviewItem.review);
+        reviews.value = reviews.value.filter(
+          (r) => r.review !== reviewItem.review
+        );
       } catch (error) {
         console.error("[Profile] Error deleting review:", error);
         showToastNotification(error.message || "Failed to delete review");
@@ -1164,6 +1367,7 @@ export default {
   padding: 1rem;
   transition: all 0.2s ease;
   position: relative;
+  cursor: pointer;
 }
 
 .review-item:hover {
@@ -1171,29 +1375,35 @@ export default {
   border-color: rgba(74, 158, 255, 0.3);
 }
 
-.review-item-content {
+.review-album-cover {
+  width: 60px;
+  height: 60px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.review-album-cover-placeholder {
+  width: 60px;
+  height: 60px;
+  border-radius: 6px;
+  background: rgba(74, 158, 255, 0.1);
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.8rem;
+  font-weight: 900;
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.review-content-details {
   flex: 1;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  cursor: pointer;
-}
-
-.delete-review-btn {
-  background: transparent;
-  border: none;
-  color: #7b8ca8;
-  font-size: 1.5rem;
-  cursor: pointer;
-  padding: 0.25rem 0.5rem;
-  line-height: 1;
-  transition: color 0.2s ease;
-  flex-shrink: 0;
-  align-self: flex-start;
-}
-
-.delete-review-btn:hover {
-  color: #ff6b6b;
+  min-width: 0;
 }
 
 .review-song-info {
@@ -1426,11 +1636,6 @@ export default {
   color: #ffffff;
 }
 
-.friend-username {
-  font-size: 0.85rem;
-  color: #7b8ca8;
-}
-
 .friend-actions {
   display: flex;
   gap: 0.5rem;
@@ -1647,4 +1852,3 @@ export default {
   }
 }
 </style>
-

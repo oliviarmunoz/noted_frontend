@@ -147,8 +147,8 @@
                 v-for="comment in review.comments"
                 :key="comment.commentId"
               >
-                <span class="comment-user">{{ comment.commenter }}:</span>
-                <span class="comment-text">{{ comment.notes }}</span>
+                <span class="comment-user">{{ comment.commenterUsername || comment.commenter }}:</span>
+                <span class="comment-text">{{ comment.notes || comment.comment }}</span>
                 <button
                   v-if="comment.commenter === userId"
                   @click="handleDeleteComment(review.id, comment.commentId)"
@@ -374,6 +374,46 @@ export default {
       }
     };
 
+    // Helper function to fetch usernames for comments
+    const enrichCommentsWithUsernames = async (comments) => {
+      if (!comments || comments.length === 0) return [];
+      
+      return await Promise.all(
+        comments.map(async (comment) => {
+          let commenterUsername = comment.commenter;
+          if (comment.commenter) {
+            try {
+              const usernameResponse = await auth.getUsername(comment.commenter);
+              // _getUsername returns an array: [{ username: "String" }]
+              if (usernameResponse && !usernameResponse.error) {
+                if (
+                  Array.isArray(usernameResponse) &&
+                  usernameResponse.length > 0
+                ) {
+                  commenterUsername =
+                    usernameResponse[0].username || comment.commenter;
+                } else if (usernameResponse.username) {
+                  commenterUsername = usernameResponse.username;
+                }
+              }
+            } catch (err) {
+              console.warn(
+                `Could not get username for commenter ${comment.commenter}:`,
+                err
+              );
+              // Keep the userId as fallback
+              commenterUsername = comment.commenter;
+            }
+          }
+          return {
+            ...comment,
+            commenterUsername: commenterUsername,
+            notes: comment.comment || comment.notes, // Support both 'comment' and 'notes' fields
+          };
+        })
+      );
+    };
+
     // Load all reviews for this item
     const loadAllReviews = async () => {
       loadingReviews.value = true;
@@ -437,7 +477,8 @@ export default {
               if (reviewComments && reviewComments.error) {
                 console.error(`Error loading comments:`, reviewComments.error);
               } else {
-                comments = reviewComments || [];
+                // Fetch usernames for each commenter
+                comments = await enrichCommentsWithUsernames(reviewComments || []);
               }
             } catch (err) {
               console.error(
@@ -695,7 +736,8 @@ export default {
             if (updatedComments && updatedComments.error) {
               console.error(`Error reloading comments:`, updatedComments.error);
             } else {
-              targetReview.comments = updatedComments || [];
+              // Fetch usernames for the updated comments
+              targetReview.comments = await enrichCommentsWithUsernames(updatedComments || []);
             }
           } catch (err) {
             console.error(
@@ -747,7 +789,8 @@ export default {
             if (updatedComments && updatedComments.error) {
               console.error(`Error reloading comments:`, updatedComments.error);
             } else {
-              targetReview.comments = updatedComments || [];
+              // Fetch usernames for the updated comments
+              targetReview.comments = await enrichCommentsWithUsernames(updatedComments || []);
             }
           } catch (err) {
             console.error(

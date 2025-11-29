@@ -870,6 +870,7 @@ export default {
                   item: target, // Keep for backward compatibility
                   musicEntity: musicEntity,
                   comments: comments,
+                  date: reviewData.date, // Store date for sorting
                 });
               } catch (err) {
                 console.warn(
@@ -883,7 +884,21 @@ export default {
           }
         }
 
-        // Sort reviews by most recent
+        // Sort reviews by most recent (by date)
+        allReviews.sort((a, b) => {
+          // If both have dates, sort by date (most recent first)
+          if (a.date && b.date) {
+            const dateA = new Date(a.date);
+            const dateB = new Date(b.date);
+            return dateB - dateA; // Most recent first (descending order)
+          }
+          // If only one has a date, prioritize it
+          if (a.date && !b.date) return -1;
+          if (!a.date && b.date) return 1;
+          // If neither has a date, maintain original order
+          return 0;
+        });
+
         this.reviews = allReviews;
       } catch (err) {
         console.error("Error loading feed:", err);

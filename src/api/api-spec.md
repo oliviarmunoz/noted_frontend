@@ -673,13 +673,23 @@
 ```
 
 **Success Response Body (Query):**
-
 ```json
 [
   {
-    "review": "string",
+    "_id": "ID",
+    "item": "ID",
+    "user": "ID",
     "rating": "number",
-    "text": "string"
+    "date": "Date",
+    "notes": "string (optional)",
+    "comments": [
+      {
+        "commentId": "ID",
+        "commenter": "ID",
+        "notes": "string",
+        "date": "Date"
+      }
+    ]
   }
 ]
 ```
@@ -790,14 +800,23 @@
 ```
 
 **Success Response Body (Query):**
-
 ```json
 [
   {
-    "review": "string",
-    "author": "string",
+    "_id": "ID",
+    "item": "ID",
+    "user": "ID",
     "rating": "number",
-    "text": "string"
+    "date": "Date",
+    "notes": "string (optional)",
+    "comments": [
+      {
+        "commentId": "ID",
+        "commenter": "ID",
+        "notes": "string",
+        "date": "Date"
+      }
+    ]
   }
 ]
 ```
@@ -833,14 +852,23 @@
 ```
 
 **Success Response Body (Query):**
-
 ```json
 [
   {
-    "review": "string",
-    "target": "string",
+    "_id": "ID",
+    "item": "ID",
+    "user": "ID",
     "rating": "number",
-    "text": "string"
+    "date": "Date",
+    "notes": "string (optional)",
+    "comments": [
+      {
+        "commentId": "ID",
+        "commenter": "ID",
+        "notes": "string",
+        "date": "Date"
+      }
+    ]
   }
 ]
 ```
@@ -876,13 +904,13 @@
 ```
 
 **Success Response Body (Query):**
-
 ```json
 [
   {
-    "commentId": "string",
-    "commenter": "string",
-    "comment": "string"
+    "commentId": "ID",
+    "commenter": "ID",
+    "notes": "string",
+    "date": "Date"
   }
 ]
 ```

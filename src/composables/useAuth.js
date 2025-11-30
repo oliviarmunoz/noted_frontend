@@ -86,9 +86,6 @@ export function useAuth() {
         localStorage.setItem('currentUser', JSON.stringify(registerData.user))
         localStorage.setItem('currentSession', JSON.stringify(sessionData.session))
 
-        await playlist.createPlaylist(registerData.user, 'Listen Later')
-        await playlist.createPlaylist(registerData.user, 'Favorites')
-        
         return { success: true }
     } catch (error) {
         console.error('[useAuth] Signup error:', error)

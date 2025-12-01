@@ -60,7 +60,7 @@
       </div>
 
       <!-- Listen Later Section -->
-      <div class="playlist-section">
+      <div id="listen-later" class="playlist-section">
         <div class="playlist-header">
           <h2 class="playlist-title">LISTEN LATER</h2>
           <span class="playlist-count" v-if="!loadingListenLater">
@@ -120,7 +120,7 @@
 
 <script>
 import { ref, onMounted, watch } from "vue";
-import { useRouter } from "vue-router";
+import { useRouter, useRoute } from "vue-router";
 import { usePlaylists } from "../composables/usePlaylists.js";
 import { useToast } from "../composables/useToast.js";
 import { usePlaylistEvents } from "../composables/usePlaylistEvents.js";
@@ -288,11 +288,34 @@ export default {
       }
     );
 
+    // Scroll to section if hash is present
+    const scrollToSection = () => {
+      const hash = window.location.hash;
+      if (hash) {
+        // Wait for content to load, then scroll
+        setTimeout(() => {
+          const element = document.querySelector(hash);
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        }, 300);
+      }
+    };
+
     // Load playlists on mount
     onMounted(() => {
       loadFavorites();
       loadListenLater();
+      scrollToSection();
     });
+
+    // Watch for route changes to handle hash navigation
+    watch(
+      () => route.hash,
+      () => {
+        scrollToSection();
+      }
+    );
 
     // Handle scroll for infinite loading
     const handleScroll = (event, playlistName) => {

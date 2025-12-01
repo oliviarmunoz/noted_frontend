@@ -5,7 +5,7 @@
         <div class="sidebar-section">
           <h2
             class="sidebar-title clickable-title"
-            @click="$router.push('/playlists')"
+            @click="$router.push('/playlists#listen-later')"
           >
             LISTEN LATER
           </h2>

@@ -104,9 +104,15 @@
               <span
                 class="reviewer-name clickable-username"
                 @click="navigateToUserProfile(review.reviewerId)"
-                v-if="review.reviewerId"
+                v-if="review.reviewerId && review.reviewerId !== userId"
               >
                 {{ review.reviewer }} reviewed
+              </span>
+              <span
+                class="reviewer-name"
+                v-else-if="review.reviewerId === userId"
+              >
+                You reviewed
               </span>
               <span class="reviewer-name" v-else
                 >{{ review.reviewer }} reviewed</span

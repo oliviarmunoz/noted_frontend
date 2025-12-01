@@ -14,11 +14,11 @@
               <span class="stat-label">Reviews</span>
             </div>
             <div class="stat-item">
-              <span class="stat-value">{{ favoritesItems.length }}</span>
+              <span class="stat-value">{{ favoritesCount }}</span>
               <span class="stat-label">Favorites</span>
             </div>
             <div class="stat-item">
-              <span class="stat-value">{{ listenLaterItems.length }}</span>
+              <span class="stat-value">{{ listenLaterCount }}</span>
               <span class="stat-label">Listen Later</span>
             </div>
             <div class="stat-item">
@@ -31,154 +31,6 @@
 
       <!-- Content Sections -->
       <div class="profile-content">
-        <!-- Reviews Section -->
-        <section class="profile-section">
-          <h2 class="section-title">REVIEWS</h2>
-          <div v-if="loadingReviews" class="loading-text">
-            Loading reviews...
-          </div>
-          <div v-else-if="reviewsError" class="error-text">
-            {{ reviewsError }}
-          </div>
-          <div v-else-if="reviews.length === 0" class="empty-message">
-            No reviews yet
-          </div>
-          <div v-else class="reviews-list">
-            <div
-              v-for="review in reviews"
-              :key="review.review"
-              class="review-item"
-              @click="navigateToReview(review)"
-            >
-              <img
-                v-if="review.imageUrl"
-                :src="review.imageUrl"
-                :alt="review.songName"
-                class="review-album-cover"
-              />
-              <div v-else class="review-album-cover-placeholder">
-                {{ review.songName?.charAt(0) || "?" }}
-              </div>
-              <div class="review-content-details">
-                <div class="review-song-info">
-                  <div class="review-song-name">
-                    {{ review.songName || "Unknown Song" }}
-                  </div>
-                  <div class="review-song-artist">
-                    {{ review.songArtist || "Unknown Artist" }}
-                  </div>
-                </div>
-                <div class="review-rating">
-                  <span
-                    v-for="i in 5"
-                    :key="i"
-                    class="star"
-                    :class="{ filled: i <= (review.rating || 0) }"
-                  >
-                    ★
-                  </span>
-                </div>
-                <p v-if="review.text" class="review-text">
-                  {{ review.text }}
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- Playlists Section -->
-        <div class="playlists-grid">
-          <!-- Favorites Section -->
-          <section class="profile-section playlist-section">
-            <h2 class="section-title">FAVORITES</h2>
-            <div v-if="loadingFavorites" class="loading-text">Loading...</div>
-            <div v-else-if="favoritesError" class="error-text">
-              {{ favoritesError }}
-            </div>
-            <ul v-else class="song-list">
-              <li
-                v-for="item in favoritesItems"
-                :key="item.item"
-                class="song-item"
-              >
-                <div
-                  class="song-item-content"
-                  @click="navigateToReviewFromItem(item)"
-                >
-                  <img
-                    v-if="item.imageUrl"
-                    :src="item.imageUrl"
-                    :alt="item.name"
-                    class="song-thumbnail"
-                  />
-                  <div v-else class="song-thumbnail-placeholder">
-                    {{ item.name?.charAt(0) || "?" }}
-                  </div>
-                  <div class="song-info">
-                    <div class="song-name">{{ item.name || "Loading..." }}</div>
-                    <div class="song-artist">{{ item.artist || "" }}</div>
-                  </div>
-                </div>
-                <button
-                  class="remove-btn"
-                  @click.stop="removeFromPlaylist(item, 'Favorites')"
-                  title="Remove from Favorites"
-                >
-                  ×
-                </button>
-              </li>
-              <li v-if="favoritesItems.length === 0" class="empty-message">
-                No favorites yet
-              </li>
-            </ul>
-          </section>
-
-          <!-- Listen Later Section -->
-          <section class="profile-section playlist-section">
-            <h2 class="section-title">LISTEN LATER</h2>
-            <div v-if="loadingListenLater" class="loading-text">Loading...</div>
-            <div v-else-if="listenLaterError" class="error-text">
-              {{ listenLaterError }}
-            </div>
-            <ul v-else class="song-list">
-              <li
-                v-for="item in listenLaterItems"
-                :key="item.item"
-                class="song-item"
-              >
-                <div
-                  class="song-item-content"
-                  @click="navigateToReviewFromItem(item)"
-                >
-                  <img
-                    v-if="item.imageUrl"
-                    :src="item.imageUrl"
-                    :alt="item.name"
-                    class="song-thumbnail"
-                  />
-                  <div v-else class="song-thumbnail-placeholder">
-                    {{ item.name?.charAt(0) || "?" }}
-                  </div>
-                  <div class="song-info">
-                    <div class="song-name">{{ item.name || "Loading..." }}</div>
-                    <div class="song-artist">{{ item.artist || "" }}</div>
-                  </div>
-                </div>
-                <button
-                  class="remove-btn"
-                  @click.stop="removeFromPlaylist(item, 'Listen Later')"
-                  title="Remove from Listen Later"
-                >
-                  ×
-                </button>
-              </li>
-              <li v-if="listenLaterItems.length === 0" class="empty-message">
-                No songs in Listen Later
-              </li>
-            </ul>
-          </section>
-        </div>
-
         <!-- Friends Section -->
         <section class="profile-section">
           <div class="friends-header">
@@ -248,124 +100,204 @@
             </div>
           </div>
 
-          <!-- Incoming Friend Requests -->
-          <div
-            v-if="incomingRequests.length > 0"
-            class="friend-requests-section"
-          >
-            <h3 class="subsection-title">Incoming Requests</h3>
-            <div class="friends-list">
+          <div class="friends-grid">
+            <!-- Left Column: Current Friends -->
+            <div class="friends-column">
+              <h3 class="subsection-title">Friends</h3>
+              <div v-if="loadingFriends" class="loading-text">
+                Loading friends...
+              </div>
+              <div v-else-if="friendsError" class="error-text">
+                {{ friendsError }}
+              </div>
               <div
-                v-for="request in incomingRequests"
-                :key="request.request"
-                class="friend-item friend-request-item"
+                v-else-if="
+                  friends.length === 0 &&
+                  incomingRequests.length === 0 &&
+                  outgoingRequests.length === 0
+                "
+                class="empty-message"
               >
-                <div class="friend-avatar">
-                  <span class="friend-icon">👤</span>
-                </div>
-                <div class="friend-info">
-                  <div class="friend-name">
-                    {{ request.requesterName || request.requester }}
+                No friends yet. Add friends to get started!
+              </div>
+              <div v-else-if="friends.length === 0" class="empty-message">
+                No friends yet
+              </div>
+              <div v-else class="friends-list">
+                <div
+                  v-for="friend in friends"
+                  :key="friend.friend"
+                  class="friend-item"
+                >
+                  <div class="friend-avatar">
+                    <span class="friend-icon">👤</span>
+                  </div>
+                  <div class="friend-info">
+                    <div class="friend-name">
+                      {{ friend.friendName || friend.friend }}
+                    </div>
+                  </div>
+                  <div class="friend-actions">
+                    <button
+                      class="remove-friend-btn"
+                      @click="handleRemoveFriend(friend)"
+                      :disabled="processingRequest"
+                      title="Remove Friend"
+                    >
+                      ×
+                    </button>
                   </div>
                 </div>
-                <div class="friend-actions">
-                  <button
-                    class="accept-btn"
-                    @click="handleAcceptRequest(request)"
-                    :disabled="processingRequest"
-                    title="Accept"
-                  >
-                    ✓
-                  </button>
-                  <button
-                    class="decline-btn"
-                    @click="handleDeclineRequest(request)"
-                    :disabled="processingRequest"
-                    title="Decline"
-                  >
-                    ×
-                  </button>
+              </div>
+            </div>
+
+            <!-- Right Column: Friend Requests -->
+            <div class="friends-column">
+              <h3 class="subsection-title">Friend Requests</h3>
+              <div v-if="loadingRequests" class="loading-text">
+                Loading requests...
+              </div>
+              <div
+                v-else-if="
+                  incomingRequests.length === 0 &&
+                  outgoingRequests.length === 0
+                "
+                class="empty-message"
+              >
+                No pending requests
+              </div>
+              <div v-else>
+                <!-- Incoming Friend Requests -->
+                <div
+                  v-if="incomingRequests.length > 0"
+                  class="friend-requests-section"
+                >
+                  <h4 class="subsubsection-title">Incoming</h4>
+                  <div class="friends-list">
+                    <div
+                      v-for="request in incomingRequests"
+                      :key="request.request"
+                      class="friend-item friend-request-item"
+                    >
+                      <div class="friend-avatar">
+                        <span class="friend-icon">👤</span>
+                      </div>
+                      <div class="friend-info">
+                        <div class="friend-name">
+                          {{ request.requesterName || request.requester }}
+                        </div>
+                      </div>
+                      <div class="friend-actions">
+                        <button
+                          class="accept-btn"
+                          @click="handleAcceptRequest(request)"
+                          :disabled="processingRequest"
+                          title="Accept"
+                        >
+                          ✓
+                        </button>
+                        <button
+                          class="decline-btn"
+                          @click="handleDeclineRequest(request)"
+                          :disabled="processingRequest"
+                          title="Decline"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Outgoing Friend Requests -->
+                <div
+                  v-if="outgoingRequests.length > 0"
+                  class="friend-requests-section"
+                >
+                  <h4 class="subsubsection-title">Outgoing</h4>
+                  <div class="friends-list">
+                    <div
+                      v-for="request in outgoingRequests"
+                      :key="request.request"
+                      class="friend-item friend-request-item"
+                    >
+                      <div class="friend-avatar">
+                        <span class="friend-icon">👤</span>
+                      </div>
+                      <div class="friend-info">
+                        <div class="friend-name">
+                          {{ request.targetName || request.target }}
+                        </div>
+                      </div>
+                      <div class="friend-actions">
+                        <button
+                          class="cancel-btn"
+                          @click="handleCancelRequest(request)"
+                          :disabled="processingRequest"
+                          title="Cancel Request"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
+        </section>
 
-          <!-- Outgoing Friend Requests -->
-          <div
-            v-if="outgoingRequests.length > 0"
-            class="friend-requests-section"
-          >
-            <h3 class="subsection-title">Outgoing Requests</h3>
-            <div class="friends-list">
+        <!-- Reviews Section -->
+        <section class="profile-section">
+          <h2 class="section-title">REVIEWS</h2>
+          <div v-if="loadingReviews" class="loading-text">
+            Loading reviews...
+          </div>
+          <div v-else-if="reviewsError" class="error-text">
+            {{ reviewsError }}
+          </div>
+          <div v-else-if="reviews.length === 0" class="empty-message">
+            No reviews yet
+          </div>
+          <div v-else class="reviews-list-container">
+            <div class="reviews-list">
               <div
-                v-for="request in outgoingRequests"
-                :key="request.request"
-                class="friend-item friend-request-item"
+                v-for="review in reviews"
+                :key="review.review"
+                class="review-item"
+                @click="navigateToReview(review)"
               >
-                <div class="friend-avatar">
-                  <span class="friend-icon">👤</span>
+                <img
+                  v-if="review.imageUrl"
+                  :src="review.imageUrl"
+                  :alt="review.songName"
+                  class="review-album-cover"
+                />
+                <div v-else class="review-album-cover-placeholder">
+                  {{ review.songName?.charAt(0) || "?" }}
                 </div>
-                <div class="friend-info">
-                  <div class="friend-name">
-                    {{ request.targetName || request.target }}
+                <div class="review-content-details">
+                  <div class="review-song-info">
+                    <div class="review-song-name">
+                      {{ review.songName || "Unknown Song" }}
+                    </div>
+                    <div class="review-song-artist">
+                      {{ review.songArtist || "Unknown Artist" }}
+                    </div>
                   </div>
-                </div>
-                <div class="friend-actions">
-                  <button
-                    class="cancel-btn"
-                    @click="handleCancelRequest(request)"
-                    :disabled="processingRequest"
-                    title="Cancel Request"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Current Friends -->
-          <div v-if="loadingFriends" class="loading-text">
-            Loading friends...
-          </div>
-          <div v-else-if="friendsError" class="error-text">
-            {{ friendsError }}
-          </div>
-          <div
-            v-else-if="
-              friends.length === 0 &&
-              incomingRequests.length === 0 &&
-              outgoingRequests.length === 0
-            "
-            class="empty-message"
-          >
-            No friends yet. Add friends to get started!
-          </div>
-          <div v-else-if="friends.length > 0" class="friend-requests-section">
-            <h3 class="subsection-title">Friends</h3>
-            <div class="friends-list">
-              <div
-                v-for="friend in friends"
-                :key="friend.friend"
-                class="friend-item"
-              >
-                <div class="friend-avatar">
-                  <span class="friend-icon">👤</span>
-                </div>
-                <div class="friend-info">
-                  <div class="friend-name">
-                    {{ friend.friendName || friend.friend }}
+                  <div class="review-rating">
+                    <span
+                      v-for="i in 5"
+                      :key="i"
+                      class="star"
+                      :class="{ filled: i <= (review.rating || 0) }"
+                    >
+                      ★
+                    </span>
                   </div>
-                </div>
-                <div class="friend-actions">
-                  <button
-                    class="remove-friend-btn"
-                    @click="handleRemoveFriend(friend)"
-                    :disabled="processingRequest"
-                    title="Remove Friend"
-                  >
-                    ×
-                  </button>
+                  <p v-if="review.text" class="review-text">
+                    {{ review.text }}
+                  </p>
                 </div>
               </div>
             </div>
@@ -380,9 +312,7 @@
 import { ref, onMounted, watch, computed } from "vue";
 import { useRouter } from "vue-router";
 import { review, friending, auth, musicDiscovery } from "../api/api.js";
-import { useEntities } from "../composables/useEntities.js";
 import { usePlaylists } from "../composables/usePlaylists.js";
-import { usePlaylistEvents } from "../composables/usePlaylistEvents.js";
 import { useToast } from "../composables/useToast.js";
 import { useAuth } from "../composables/useAuth.js";
 
@@ -407,21 +337,18 @@ export default {
 
     const username = ref("");
     const reviews = ref([]);
-    const favoritesItems = ref([]);
-    const listenLaterItems = ref([]);
     const friends = ref([]);
     const incomingRequests = ref([]);
     const outgoingRequests = ref([]);
 
+    const favoritesCount = ref(0);
+    const listenLaterCount = ref(0);
+
     const loadingReviews = ref(false);
-    const loadingFavorites = ref(false);
-    const loadingListenLater = ref(false);
     const loadingFriends = ref(false);
     const loadingRequests = ref(false);
 
     const reviewsError = ref(null);
-    const favoritesError = ref(null);
-    const listenLaterError = ref(null);
     const friendsError = ref(null);
 
     // Friend search and add modal
@@ -433,31 +360,7 @@ export default {
     const userSearchError = ref(null);
     const processingRequest = ref(false);
 
-    const { loadEntityByExternalId } = useEntities();
-
-    // usePlaylists needs a string userId, create wrapper functions that use userId.value
-    const loadPlaylistItemsWrapper = async (playlistName) => {
-      if (!userId.value) {
-        return { items: [], error: "User not authenticated" };
-      }
-      const playlistComposable = usePlaylists();
-      return await playlistComposable.loadPlaylistItems(playlistName);
-    };
-
-    const removeItemFromPlaylistWrapper = async (itemId, playlistName) => {
-      if (!userId.value) {
-        return { success: false, error: "User not authenticated" };
-      }
-      const playlistComposable = usePlaylists();
-      return await playlistComposable.removeItemFromPlaylist(
-        itemId,
-        playlistName
-      );
-    };
-
-    const loadPlaylistItems = loadPlaylistItemsWrapper;
-    const removeItemFromPlaylist = removeItemFromPlaylistWrapper;
-    const { playlistUpdateEvent } = usePlaylistEvents();
+    const { getPlaylistCount } = usePlaylists();
     const { showToastNotification } = useToast();
 
     // Load username
@@ -582,6 +485,7 @@ export default {
                 // Ensure text/notes field is properly set (API returns "text" for _getUserReviews)
                 text: reviewData.text || reviewData.notes || "",
                 rating: reviewData.rating || 0,
+                date: reviewData.date, // Preserve date for sorting
               };
             } catch (err) {
               console.warn(
@@ -595,10 +499,26 @@ export default {
                 songArtist: "Unknown Artist",
                 text: reviewData.text || reviewData.notes || "",
                 rating: reviewData.rating || 0,
+                date: reviewData.date, // Preserve date for sorting
               };
             }
           })
         );
+
+        // Sort reviews by most recent first (by date)
+        reviewsWithDetails.sort((a, b) => {
+          // If both have dates, sort by date (most recent first)
+          if (a.date && b.date) {
+            const dateA = new Date(a.date);
+            const dateB = new Date(b.date);
+            return dateB - dateA; // Most recent first (descending order)
+          }
+          // If only one has a date, prioritize it
+          if (a.date && !b.date) return -1;
+          if (!a.date && b.date) return 1;
+          // If neither has a date, maintain original order
+          return 0;
+        });
 
         reviews.value = reviewsWithDetails;
       } catch (error) {
@@ -610,78 +530,20 @@ export default {
       }
     };
 
-    // Load favorites
-    const loadFavorites = async () => {
-      loadingFavorites.value = true;
-      favoritesError.value = null;
-
+    // Load playlist counts (lightweight - no entity details)
+    const loadPlaylistCounts = async () => {
       try {
-        const result = await loadPlaylistItems("Favorites");
-        if (result.error) {
-          favoritesError.value = result.error;
-          favoritesItems.value = [];
-        } else {
-          favoritesItems.value = result.items;
+        const favoritesResult = await getPlaylistCount("Favorites");
+        if (!favoritesResult.error) {
+          favoritesCount.value = favoritesResult.count;
+        }
+
+        const listenLaterResult = await getPlaylistCount("Listen Later");
+        if (!listenLaterResult.error) {
+          listenLaterCount.value = listenLaterResult.count;
         }
       } catch (error) {
-        console.error("[Profile] Error loading favorites:", error);
-        favoritesError.value = error.message || "Failed to load favorites";
-        favoritesItems.value = [];
-      } finally {
-        loadingFavorites.value = false;
-      }
-    };
-
-    // Load listen later
-    const loadListenLater = async () => {
-      loadingListenLater.value = true;
-      listenLaterError.value = null;
-
-      try {
-        const result = await loadPlaylistItems("Listen Later");
-        if (result.error) {
-          listenLaterError.value = result.error;
-          listenLaterItems.value = [];
-        } else {
-          listenLaterItems.value = result.items;
-        }
-      } catch (error) {
-        console.error("[Profile] Error loading listen later:", error);
-        listenLaterError.value = error.message || "Failed to load listen later";
-        listenLaterItems.value = [];
-      } finally {
-        loadingListenLater.value = false;
-      }
-    };
-
-    // Remove item from playlist
-    const removeFromPlaylist = async (item, playlistName) => {
-      if (!item.item) {
-        showToastNotification("Error: Item ID not found");
-        return;
-      }
-
-      try {
-        const result = await removeItemFromPlaylist(item.item, playlistName);
-
-        if (!result.success) {
-          showToastNotification(
-            result.error || `Error removing from ${playlistName}`
-          );
-          return;
-        }
-
-        showToastNotification(`Removed from ${playlistName}`);
-
-        // Reload the playlist
-        if (playlistName === "Favorites") {
-          await loadFavorites();
-        } else {
-          await loadListenLater();
-        }
-      } catch (error) {
-        console.error(`[Profile] Error removing from ${playlistName}:`, error);
-        showToastNotification(`Error removing from ${playlistName}`);
+        console.error("[Profile] Error loading playlist counts:", error);
       }
     };
 
@@ -1148,20 +1010,6 @@ export default {
       }
     };
 
-    // Watch for playlist updates from other components
-    watch(
-      () => playlistUpdateEvent.value,
-      (update) => {
-        if (update) {
-          // Refresh the playlist that was updated
-          if (update.playlistName === "Favorites") {
-            loadFavorites();
-          } else if (update.playlistName === "Listen Later") {
-            loadListenLater();
-          }
-        }
-      }
-    );
 
     // Reset search state when modal closes
     watch(
@@ -1180,8 +1028,7 @@ export default {
       await Promise.all([
         loadUsername(),
         loadReviews(),
-        loadFavorites(),
-        loadListenLater(),
+        loadPlaylistCounts(),
         loadFriends(),
         loadFriendRequests(),
       ]);
@@ -1190,19 +1037,15 @@ export default {
     return {
       username,
       reviews,
-      favoritesItems,
-      listenLaterItems,
+      favoritesCount,
+      listenLaterCount,
       friends,
       incomingRequests,
       outgoingRequests,
       loadingReviews,
-      loadingFavorites,
-      loadingListenLater,
       loadingFriends,
       loadingRequests,
       reviewsError,
-      favoritesError,
-      listenLaterError,
       friendsError,
       showAddFriendModal,
       friendSearchQuery,
@@ -1212,9 +1055,7 @@ export default {
       userSearchError,
       processingRequest,
       navigateToReview,
-      navigateToReviewFromItem,
       handleDeleteReview,
-      removeFromPlaylist,
       searchUser,
       handleSendFriendRequest,
       handleAcceptRequest,
@@ -1308,18 +1149,6 @@ export default {
   gap: 2rem;
 }
 
-/* Playlists Grid */
-.playlists-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 2rem;
-}
-
-.playlist-section {
-  min-height: 200px;
-  max-height: 600px;
-  overflow-y: auto;
-}
 
 .profile-section {
   background: rgba(26, 35, 52, 0.6);
@@ -1351,6 +1180,30 @@ export default {
 }
 
 /* Reviews List */
+.reviews-list-container {
+  max-height: 600px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.reviews-list-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.reviews-list-container::-webkit-scrollbar-track {
+  background: rgba(10, 14, 26, 0.3);
+  border-radius: 4px;
+}
+
+.reviews-list-container::-webkit-scrollbar-thumb {
+  background: rgba(74, 158, 255, 0.3);
+  border-radius: 4px;
+}
+
+.reviews-list-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(74, 158, 255, 0.5);
+}
+
 .reviews-list {
   display: flex;
   flex-direction: column;
@@ -1549,6 +1402,52 @@ export default {
   margin-bottom: 1.5rem;
 }
 
+.friends-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+}
+
+.friends-column {
+  display: flex;
+  flex-direction: column;
+  height: 250px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 0.5rem;
+}
+
+.friends-column > .subsection-title {
+  flex-shrink: 0;
+  margin-bottom: 1rem;
+}
+
+.friends-column > .friends-list,
+.friends-column > .friend-requests-section,
+.friends-column > .loading-text,
+.friends-column > .error-text,
+.friends-column > .empty-message {
+  flex-shrink: 0;
+}
+
+.friends-column::-webkit-scrollbar {
+  width: 6px;
+}
+
+.friends-column::-webkit-scrollbar-track {
+  background: rgba(10, 14, 26, 0.3);
+  border-radius: 3px;
+}
+
+.friends-column::-webkit-scrollbar-thumb {
+  background: rgba(74, 158, 255, 0.3);
+  border-radius: 3px;
+}
+
+.friends-column::-webkit-scrollbar-thumb:hover {
+  background: rgba(74, 158, 255, 0.5);
+}
+
 .add-friend-btn {
   padding: 0.5rem 1rem;
   background: rgba(74, 158, 255, 0.2);
@@ -1567,7 +1466,11 @@ export default {
 }
 
 .friend-requests-section {
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
+}
+
+.friend-requests-section:last-child {
+  margin-bottom: 0;
 }
 
 .subsection-title {
@@ -1577,6 +1480,16 @@ export default {
   margin-bottom: 1rem;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+.subsubsection-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #7b8ca8;
+  margin-bottom: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.8;
 }
 
 /* Friends List */
@@ -1645,8 +1558,7 @@ export default {
 
 .accept-btn,
 .decline-btn,
-.cancel-btn,
-.remove-friend-btn {
+.cancel-btn {
   padding: 0.5rem 0.75rem;
   border: none;
   border-radius: 4px;
@@ -1654,12 +1566,30 @@ export default {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.cancel-btn {
+  background: rgba(255, 152, 0, 0.2);
+  border: 1px solid rgba(255, 152, 0, 0.3);
+  color: #ff9800;
+  width: 4.5rem;
+  min-width: 4.5rem;
+  max-width: 4.5rem;
 }
 
 .accept-btn {
   background: rgba(76, 175, 80, 0.2);
   border: 1px solid rgba(76, 175, 80, 0.3);
   color: #4caf50;
+  width: 2rem;
+  min-width: 2rem;
+  max-width: 2rem;
+  padding: 0.5rem 0;
 }
 
 .accept-btn:hover:not(:disabled) {
@@ -1667,19 +1597,44 @@ export default {
   border-color: rgba(76, 175, 80, 0.5);
 }
 
-.decline-btn,
-.remove-friend-btn {
-  background: transparent;
-  border: 1px solid rgba(123, 140, 168, 0.3);
-  color: #7b8ca8;
-  font-size: 1.2rem;
-  padding: 0.25rem 0.5rem;
+.decline-btn {
+  background: rgba(255, 107, 107, 0.2);
+  border: 1px solid rgba(255, 107, 107, 0.3);
+  color: #ff6b6b;
+  width: 2rem;
+  min-width: 2rem;
+  max-width: 2rem;
+  padding: 0.5rem 0;
 }
 
-.decline-btn:hover:not(:disabled),
-.remove-friend-btn:hover:not(:disabled) {
+.decline-btn:hover:not(:disabled) {
+  background: rgba(255, 107, 107, 0.3);
+  border-color: rgba(255, 107, 107, 0.5);
+}
+
+.remove-friend-btn {
+  background: rgba(255, 107, 107, 0.2);
+  border: 1px solid rgba(255, 107, 107, 0.3);
+  border-radius: 4px;
   color: #ff6b6b;
-  border-color: rgba(255, 107, 107, 0.3);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 2rem;
+  min-width: 2rem;
+  max-width: 2rem;
+  padding: 0.5rem 0;
+}
+
+.remove-friend-btn:hover:not(:disabled) {
+  background: rgba(255, 107, 107, 0.3);
+  border-color: rgba(255, 107, 107, 0.5);
 }
 
 .cancel-btn {
@@ -1830,7 +1785,7 @@ export default {
 }
 
 @media (max-width: 968px) {
-  .playlists-grid {
+  .friends-grid {
     grid-template-columns: 1fr;
   }
 }

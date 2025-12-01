@@ -82,6 +82,32 @@ export function usePlaylists() {
   };
 
   /**
+   * Get the count of items in a playlist (lightweight - no entity details)
+   * @param {string} playlistName - Name of the playlist
+   * @returns {Promise<{count: number, error: string|null}>}
+   */
+  const getPlaylistCount = async (playlistName) => {
+    try {
+      const userId = getUserId();
+      if (!userId) {
+        return { count: 0, error: 'No userId found in localStorage' };
+      }
+
+      const items = await playlist.getPlaylistItems(userId, playlistName);
+
+      if (items && items.error) {
+        return { count: 0, error: items.error };
+      }
+
+      const count = (items || []).length;
+      return { count, error: null };
+    } catch (error) {
+      console.error(`[usePlaylists] Error getting ${playlistName} count:`, error);
+      return { count: 0, error: error.message || "Failed to get playlist count" };
+    }
+  };
+
+  /**
    * Remove an item from a playlist
    * @param {string} itemId - The ID of the item to remove
    * @param {string} playlistName - Name of the playlist
@@ -110,6 +136,7 @@ export function usePlaylists() {
   return {
     addItemToPlaylist,
     loadPlaylistItems,
+    getPlaylistCount,
     removeItemFromPlaylist,
   };
 }

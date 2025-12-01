@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { auth, session, playlist } from '../api/api'
+import { auth } from '../api/api'
 
 const initializeAuthState = () => {
   try {
@@ -44,20 +44,22 @@ export function useAuth() {
             throw new Error('Account with username does not exist.')
         }
 
-        const authData = await auth.authenticate(username, password)
+        const response = await auth.login(username, password)
         
-        if (authData.error) {
+        if (response.error) {
             throw new Error('Password is incorrect.')
         }
-        
-        const sessionData = await session.create(authData.user)
 
-        currentUser.value = authData.user
-        currentSession.value = sessionData.session
+        currentSession.value = response.session
+        const sessionUserResponse = await auth.getSessionUser(response.session)
+        if (sessionUserResponse.error) {
+            throw new Error('Session user not found.')
+        }
+        currentUser.value = sessionUserResponse[0].user
         
         // Persist to localStorage
-        localStorage.setItem('currentUser', JSON.stringify(authData.user))
-        localStorage.setItem('currentSession', JSON.stringify(sessionData.session))
+        localStorage.setItem('currentUser', JSON.stringify(sessionUserResponse[0].user))
+        localStorage.setItem('currentSession', JSON.stringify(response.session))
         
         return { success: true }
     } catch (error) {
@@ -78,13 +80,7 @@ export function useAuth() {
             throw new Error('Registration failed')
         }
         
-        const sessionData = await session.create(registerData.user)
-
-        currentUser.value = registerData.user
-        currentSession.value = sessionData.session
-        
-        localStorage.setItem('currentUser', JSON.stringify(registerData.user))
-        localStorage.setItem('currentSession', JSON.stringify(sessionData.session))
+        await login(username, password)
 
         return { success: true }
     } catch (error) {
@@ -96,7 +92,7 @@ export function useAuth() {
   const logout = async () => {
     try {
         if (currentSession.value) {
-            await session.delete(currentSession.value)
+            await auth.logout(currentSession.value)
         }
 
         currentUser.value = null
@@ -117,9 +113,9 @@ export function useAuth() {
     }
 
     try {
-        const data = await session.getUser(currentSession.value)
+        const data = await auth.getSessionUser(currentSession.value)
       
-        if (!data[0]) {
+        if (!data[0] || !data[0].user) {
             currentUser.value = null
             currentSession.value = null
             localStorage.removeItem('currentUser')

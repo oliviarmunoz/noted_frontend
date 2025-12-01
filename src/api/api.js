@@ -92,25 +92,19 @@ export const review = {
     apiCall("/api/Review/_getReviewComments", { review }),
 };
 
-// Session API
-export const session = {
-  create: (user) => 
-    apiCall('/api/Session/create', { user }),
-  
-  delete: (session) => 
-    apiCall('/api/Session/delete', { session }),
-
-  getUser: (session) =>
-    apiCall('/api/Session/_getUser', { session }),
-};
-
-// UserAuthentication API
+// User Authentication API
 export const auth = {
   register: (username, password) =>
     apiCall("/api/UserAuthentication/register", { username, password }),
 
-  authenticate: (username, password) =>
-    apiCall("/api/UserAuthentication/authenticate", { username, password }),
+  login: (username, password) =>
+    apiCall("/api/login", { username, password }),
+
+  logout: (session) =>
+    apiCall("/api/logout", { session }),
+
+  getSessionUser: (session) =>
+    apiCall("/api/Session/_getUser", { session }),
 
   getUsername: (user) =>
     apiCall("/api/UserAuthentication/_getUsername", { user }),

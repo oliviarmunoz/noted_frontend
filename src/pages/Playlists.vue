@@ -130,6 +130,7 @@ export default {
   name: "Playlists",
   setup() {
     const router = useRouter();
+    const route = useRoute();
     const { currentUser } = useAuth();
     const userId = ref(null);
     const favoritesItems = ref([]);

@@ -31,8 +31,8 @@
 
       <!-- Content Sections -->
       <div class="profile-content">
-        <!-- Friends Section -->
-        <section class="profile-section">
+        <!-- Friends Section (only for own profile) -->
+        <section v-if="isOwnProfile" class="profile-section">
           <div class="friends-header">
             <h2 class="section-title">FRIENDS</h2>
             <button
@@ -133,7 +133,10 @@
                     <span class="friend-icon">👤</span>
                   </div>
                   <div class="friend-info">
-                    <div class="friend-name">
+                    <div
+                      class="friend-name clickable-name"
+                      @click="navigateToUserProfile(friend.friend)"
+                    >
                       {{ friend.friendName || friend.friend }}
                     </div>
                   </div>
@@ -159,8 +162,7 @@
               </div>
               <div
                 v-else-if="
-                  incomingRequests.length === 0 &&
-                  outgoingRequests.length === 0
+                  incomingRequests.length === 0 && outgoingRequests.length === 0
                 "
                 class="empty-message"
               >
@@ -183,7 +185,10 @@
                         <span class="friend-icon">👤</span>
                       </div>
                       <div class="friend-info">
-                        <div class="friend-name">
+                        <div
+                          class="friend-name clickable-name"
+                          @click="navigateToUserProfile(request.requester)"
+                        >
                           {{ request.requesterName || request.requester }}
                         </div>
                       </div>
@@ -225,7 +230,10 @@
                         <span class="friend-icon">👤</span>
                       </div>
                       <div class="friend-info">
-                        <div class="friend-name">
+                        <div
+                          class="friend-name clickable-name"
+                          @click="navigateToUserProfile(request.target)"
+                        >
                           {{ request.targetName || request.target }}
                         </div>
                       </div>
@@ -242,6 +250,75 @@
                     </div>
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Playlists Section (Favorites and Listen Later) -->
+        <section class="profile-section">
+          <h2 class="section-title">FAVORITES</h2>
+          <div v-if="loadingFavorites" class="loading-text">
+            Loading favorites...
+          </div>
+          <div v-else-if="favoritesItems.length === 0" class="empty-message">
+            No favorites yet
+          </div>
+          <div v-else class="playlist-items-list">
+            <div
+              v-for="item in favoritesItems"
+              :key="item.item"
+              class="playlist-item"
+              @click="navigateToReview(item)"
+            >
+              <img
+                v-if="item.imageUrl"
+                :src="item.imageUrl"
+                :alt="item.name"
+                class="playlist-item-thumbnail"
+              />
+              <div v-else class="playlist-item-thumbnail-placeholder">
+                {{ item.name?.charAt(0) || "?" }}
+              </div>
+              <div class="playlist-item-info">
+                <div class="playlist-item-name">
+                  {{ item.name || "Unknown" }}
+                </div>
+                <div class="playlist-item-artist">{{ item.artist || "" }}</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="profile-section">
+          <h2 class="section-title">LISTEN LATER</h2>
+          <div v-if="loadingListenLater" class="loading-text">
+            Loading listen later...
+          </div>
+          <div v-else-if="listenLaterItems.length === 0" class="empty-message">
+            No items in listen later yet
+          </div>
+          <div v-else class="playlist-items-list">
+            <div
+              v-for="item in listenLaterItems"
+              :key="item.item"
+              class="playlist-item"
+              @click="navigateToReview(item)"
+            >
+              <img
+                v-if="item.imageUrl"
+                :src="item.imageUrl"
+                :alt="item.name"
+                class="playlist-item-thumbnail"
+              />
+              <div v-else class="playlist-item-thumbnail-placeholder">
+                {{ item.name?.charAt(0) || "?" }}
+              </div>
+              <div class="playlist-item-info">
+                <div class="playlist-item-name">
+                  {{ item.name || "Unknown" }}
+                </div>
+                <div class="playlist-item-artist">{{ item.artist || "" }}</div>
               </div>
             </div>
           </div>
@@ -310,8 +387,14 @@
 
 <script>
 import { ref, onMounted, watch, computed } from "vue";
-import { useRouter } from "vue-router";
-import { review, friending, auth, musicDiscovery } from "../api/api.js";
+import { useRouter, useRoute } from "vue-router";
+import {
+  review,
+  friending,
+  auth,
+  musicDiscovery,
+  playlist,
+} from "../api/api.js";
 import { usePlaylists } from "../composables/usePlaylists.js";
 import { useToast } from "../composables/useToast.js";
 import { useAuth } from "../composables/useAuth.js";
@@ -320,20 +403,94 @@ export default {
   name: "Profile",
   setup() {
     const router = useRouter();
+    const route = useRoute();
     const { currentUser } = useAuth();
 
-    // Get userId from authenticated user
-    const userId = ref(null);
+    // Get target username from route params
+    const targetUsername = computed(() => {
+      return route.params.username || null;
+    });
 
-    // Update userId when currentUser changes
+    // Get current authenticated user ID and username
+    const currentUserId = ref(null);
+    const currentUsername = ref("");
     watch(
       () => currentUser.value,
-      (user) => {
-        // currentUser might be the user object or just the user ID string
-        userId.value = user?._id || user || null;
+      async (user) => {
+        currentUserId.value = user?._id || user || null;
+        if (currentUserId.value) {
+          try {
+            const result = await auth.getUsername(currentUserId.value);
+            const usernameData =
+              Array.isArray(result) && result.length > 0 ? result[0] : result;
+            currentUsername.value =
+              usernameData?.username || currentUserId.value;
+          } catch (error) {
+            console.error("[Profile] Error loading current username:", error);
+            currentUsername.value = currentUserId.value;
+          }
+        }
       },
       { immediate: true }
     );
+
+    // Resolve userId from username if viewing another user's profile
+    const userId = ref(null);
+    const loadingUserId = ref(false);
+
+    const resolveUserId = async () => {
+      if (!targetUsername.value) {
+        // No username in route, use current user
+        userId.value = currentUserId.value;
+        return;
+      }
+
+      // If viewing own profile (username matches), use current user ID
+      if (targetUsername.value === currentUsername.value) {
+        userId.value = currentUserId.value;
+        return;
+      }
+
+      // Look up userId from username
+      loadingUserId.value = true;
+      try {
+        const result = await auth.getUserByUsername(targetUsername.value);
+        if (result && result.error) {
+          console.error(
+            "[Profile] Error looking up user by username:",
+            result.error
+          );
+          userId.value = null;
+          return;
+        }
+
+        // API returns an array: [{ "user": "User" }]
+        const userData =
+          Array.isArray(result) && result.length > 0 ? result[0] : result;
+        userId.value = userData?.user || null;
+      } catch (error) {
+        console.error("[Profile] Error resolving userId from username:", error);
+        userId.value = null;
+      } finally {
+        loadingUserId.value = false;
+      }
+    };
+
+    // Watch for route changes and resolve userId
+    watch(
+      [targetUsername, currentUserId, currentUsername],
+      () => {
+        resolveUserId();
+      },
+      { immediate: true }
+    );
+
+    // Check if viewing own profile
+    const isOwnProfile = computed(() => {
+      return (
+        !targetUsername.value || targetUsername.value === currentUsername.value
+      );
+    });
 
     const username = ref("");
     const reviews = ref([]);
@@ -532,20 +689,240 @@ export default {
       }
     };
 
+    // Playlist items for display
+    const favoritesItems = ref([]);
+    const listenLaterItems = ref([]);
+    const loadingFavorites = ref(false);
+    const loadingListenLater = ref(false);
+
     // Load playlist counts (lightweight - no entity details)
     const loadPlaylistCounts = async () => {
       try {
-        const favoritesResult = await getPlaylistCount("Favorites");
-        if (!favoritesResult.error) {
-          favoritesCount.value = favoritesResult.count;
+        if (!userId.value) return;
+
+        // Use direct API call to support viewing other users' playlists
+        const favoritesResult = await playlist.getPlaylistItems(
+          userId.value,
+          "Favorites"
+        );
+        if (!favoritesResult || favoritesResult.error) {
+          favoritesCount.value = 0;
+        } else {
+          favoritesCount.value = (favoritesResult || []).length;
         }
 
-        const listenLaterResult = await getPlaylistCount("Listen Later");
-        if (!listenLaterResult.error) {
-          listenLaterCount.value = listenLaterResult.count;
+        const listenLaterResult = await playlist.getPlaylistItems(
+          userId.value,
+          "Listen Later"
+        );
+        if (!listenLaterResult || listenLaterResult.error) {
+          listenLaterCount.value = 0;
+        } else {
+          listenLaterCount.value = (listenLaterResult || []).length;
         }
       } catch (error) {
         console.error("[Profile] Error loading playlist counts:", error);
+      }
+    };
+
+    // Load playlist items with entity details
+    const loadPlaylistItems = async () => {
+      if (!userId.value) return;
+
+      // Load Favorites
+      loadingFavorites.value = true;
+      try {
+        const favoritesResult = await playlist.getPlaylistItems(
+          userId.value,
+          "Favorites"
+        );
+        if (favoritesResult && !favoritesResult.error) {
+          // Load entity details for each item
+          favoritesItems.value = await Promise.all(
+            (favoritesResult || []).slice(0, 20).map(async (itemObj) => {
+              const itemId = itemObj.item || itemObj;
+              try {
+                // Try as external ID first (playlist items are stored as externalId)
+                let entityResponse = await musicDiscovery.getEntityFromId(
+                  itemId
+                );
+
+                // Extract musicEntity from response
+                let musicEntity = null;
+                if (
+                  Array.isArray(entityResponse) &&
+                  entityResponse.length > 0
+                ) {
+                  musicEntity =
+                    entityResponse[0].musicEntity || entityResponse[0];
+                } else if (entityResponse?.musicEntity) {
+                  musicEntity = entityResponse.musicEntity;
+                } else if (entityResponse && !entityResponse.error) {
+                  musicEntity = entityResponse;
+                }
+
+                // If that didn't work, try as URI
+                if (!musicEntity || musicEntity.error) {
+                  try {
+                    entityResponse = await musicDiscovery.getEntityFromUri(
+                      itemId
+                    );
+                    if (
+                      Array.isArray(entityResponse) &&
+                      entityResponse.length > 0
+                    ) {
+                      musicEntity =
+                        entityResponse[0].musicEntity || entityResponse[0];
+                    } else if (entityResponse?.musicEntity) {
+                      musicEntity = entityResponse.musicEntity;
+                    } else if (entityResponse && !entityResponse.error) {
+                      musicEntity = entityResponse;
+                    }
+                  } catch (e) {
+                    console.warn(
+                      `[Profile] Could not load entity by URI for ${itemId}:`,
+                      e
+                    );
+                  }
+                }
+
+                if (musicEntity && !musicEntity.error) {
+                  return {
+                    item: itemId,
+                    name: musicEntity.name || "Unknown",
+                    artist: musicEntity.artistName || musicEntity.artist || "",
+                    uri: musicEntity.uri || musicEntity.externalId || itemId,
+                    imageUrl: musicEntity.imageUrl || null,
+                  };
+                }
+                return {
+                  item: itemId,
+                  name: "Unknown",
+                  artist: "",
+                  uri: itemId,
+                  imageUrl: null,
+                };
+              } catch (err) {
+                console.warn(
+                  `[Profile] Error loading entity for favorite ${itemId}:`,
+                  err
+                );
+                return {
+                  item: itemId,
+                  name: "Unknown",
+                  artist: "",
+                  uri: itemId,
+                  imageUrl: null,
+                };
+              }
+            })
+          );
+        } else {
+          favoritesItems.value = [];
+        }
+      } catch (error) {
+        console.error("[Profile] Error loading favorites:", error);
+        favoritesItems.value = [];
+      } finally {
+        loadingFavorites.value = false;
+      }
+
+      // Load Listen Later
+      loadingListenLater.value = true;
+      try {
+        const listenLaterResult = await playlist.getPlaylistItems(
+          userId.value,
+          "Listen Later"
+        );
+        if (listenLaterResult && !listenLaterResult.error) {
+          // Load entity details for each item
+          listenLaterItems.value = await Promise.all(
+            (listenLaterResult || []).slice(0, 20).map(async (itemObj) => {
+              const itemId = itemObj.item || itemObj;
+              try {
+                // Try as external ID first (playlist items are stored as externalId)
+                let entityResponse = await musicDiscovery.getEntityFromId(
+                  itemId
+                );
+
+                // Extract musicEntity from response
+                let musicEntity = null;
+                if (
+                  Array.isArray(entityResponse) &&
+                  entityResponse.length > 0
+                ) {
+                  musicEntity =
+                    entityResponse[0].musicEntity || entityResponse[0];
+                } else if (entityResponse?.musicEntity) {
+                  musicEntity = entityResponse.musicEntity;
+                } else if (entityResponse && !entityResponse.error) {
+                  musicEntity = entityResponse;
+                }
+
+                // If that didn't work, try as URI
+                if (!musicEntity || musicEntity.error) {
+                  try {
+                    entityResponse = await musicDiscovery.getEntityFromUri(
+                      itemId
+                    );
+                    if (
+                      Array.isArray(entityResponse) &&
+                      entityResponse.length > 0
+                    ) {
+                      musicEntity =
+                        entityResponse[0].musicEntity || entityResponse[0];
+                    } else if (entityResponse?.musicEntity) {
+                      musicEntity = entityResponse.musicEntity;
+                    } else if (entityResponse && !entityResponse.error) {
+                      musicEntity = entityResponse;
+                    }
+                  } catch (e) {
+                    console.warn(
+                      `[Profile] Could not load entity by URI for ${itemId}:`,
+                      e
+                    );
+                  }
+                }
+
+                if (musicEntity && !musicEntity.error) {
+                  return {
+                    item: itemId,
+                    name: musicEntity.name || "Unknown",
+                    artist: musicEntity.artistName || musicEntity.artist || "",
+                    uri: musicEntity.uri || musicEntity.externalId || itemId,
+                    imageUrl: musicEntity.imageUrl || null,
+                  };
+                }
+                return {
+                  item: itemId,
+                  name: "Unknown",
+                  artist: "",
+                  uri: itemId,
+                  imageUrl: null,
+                };
+              } catch (err) {
+                console.warn(
+                  `[Profile] Error loading entity for listen later ${itemId}:`,
+                  err
+                );
+                return {
+                  item: itemId,
+                  name: "Unknown",
+                  artist: "",
+                  uri: itemId,
+                  imageUrl: null,
+                };
+              }
+            })
+          );
+        } else {
+          listenLaterItems.value = [];
+        }
+      } catch (error) {
+        console.error("[Profile] Error loading listen later:", error);
+        listenLaterItems.value = [];
+      } finally {
+        loadingListenLater.value = false;
       }
     };
 
@@ -956,26 +1333,15 @@ export default {
       }
     };
 
-    // Navigate to review page from review item
-    const navigateToReview = (reviewItem) => {
-      const uri = reviewItem.songUri || reviewItem.uri;
+    // Navigate to review page from review item or playlist item
+    const navigateToReview = (item) => {
+      const uri = item.songUri || item.uri;
       if (!uri) {
-        console.error("Review missing song URI:", reviewItem);
-        return;
-      }
-
-      const encodedUri = encodeURIComponent(uri);
-      router.push(`/review/${encodedUri}`);
-    };
-
-    // Navigate to review page from playlist item
-    const navigateToReviewFromItem = (item) => {
-      if (!item.uri) {
         console.error("Item missing URI:", item);
         return;
       }
 
-      const encodedUri = encodeURIComponent(item.uri);
+      const encodedUri = encodeURIComponent(uri);
       router.push(`/review/${encodedUri}`);
     };
 
@@ -1012,7 +1378,6 @@ export default {
       }
     };
 
-
     // Reset search state when modal closes
     watch(
       () => showAddFriendModal.value,
@@ -1025,22 +1390,78 @@ export default {
       }
     );
 
-    // Load all data on mount
-    onMounted(async () => {
-      await Promise.all([
-        loadUsername(),
-        loadReviews(),
-        loadPlaylistCounts(),
-        loadFriends(),
-        loadFriendRequests(),
-      ]);
-    });
+    // Watch for userId changes (after resolution from username)
+    watch(
+      () => userId.value,
+      async () => {
+        if (!userId.value && targetUsername.value) {
+          // Still loading userId from username
+          return;
+        }
+        if (!userId.value) {
+          // No userId available
+          return;
+        }
+        await Promise.all([
+          loadUsername(),
+          loadReviews(),
+          loadPlaylistCounts(),
+          loadPlaylistItems(),
+        ]);
+        // Only load friends/requests for own profile
+        if (isOwnProfile.value) {
+          await Promise.all([loadFriends(), loadFriendRequests()]);
+        } else {
+          friends.value = [];
+          incomingRequests.value = [];
+          outgoingRequests.value = [];
+        }
+      },
+      { immediate: true }
+    );
+
+    // Navigate to user profile by username
+    const navigateToUserProfile = async (targetUserId) => {
+      if (!targetUserId) return;
+
+      try {
+        // Get username from userId
+        const result = await auth.getUsername(targetUserId);
+        if (result && result.error) {
+          console.error(
+            "[Profile] Error getting username for navigation:",
+            result.error
+          );
+          return;
+        }
+
+        // API returns an array: [{ "username": "String" }]
+        const usernameData =
+          Array.isArray(result) && result.length > 0 ? result[0] : result;
+        const targetUsername = usernameData?.username;
+
+        if (targetUsername) {
+          router.push(`/profile/${encodeURIComponent(targetUsername)}`);
+        } else {
+          console.error(
+            "[Profile] Username not found for userId:",
+            targetUserId
+          );
+        }
+      } catch (error) {
+        console.error("[Profile] Error navigating to user profile:", error);
+      }
+    };
 
     return {
       username,
       reviews,
       favoritesCount,
       listenLaterCount,
+      favoritesItems,
+      listenLaterItems,
+      loadingFavorites,
+      loadingListenLater,
       friends,
       incomingRequests,
       outgoingRequests,
@@ -1056,7 +1477,9 @@ export default {
       sendingRequest,
       userSearchError,
       processingRequest,
+      isOwnProfile,
       navigateToReview,
+      navigateToUserProfile,
       handleDeleteReview,
       searchUser,
       handleSendFriendRequest,
@@ -1150,7 +1573,6 @@ export default {
   flex-direction: column;
   gap: 2rem;
 }
-
 
 .profile-section {
   background: rgba(26, 35, 52, 0.6);
@@ -1551,6 +1973,15 @@ export default {
   color: #ffffff;
 }
 
+.clickable-name {
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.clickable-name:hover {
+  color: #4a9eff;
+}
+
 .friend-actions {
   display: flex;
   gap: 0.5rem;
@@ -1790,6 +2221,96 @@ export default {
   .friends-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* Playlist Items */
+.playlist-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-height: 400px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.playlist-items-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.playlist-items-list::-webkit-scrollbar-track {
+  background: rgba(10, 14, 26, 0.3);
+  border-radius: 4px;
+}
+
+.playlist-items-list::-webkit-scrollbar-thumb {
+  background: rgba(74, 158, 255, 0.3);
+  border-radius: 4px;
+}
+
+.playlist-items-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(74, 158, 255, 0.5);
+}
+
+.playlist-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem;
+  background: rgba(10, 14, 26, 0.6);
+  border: 1px solid rgba(123, 140, 168, 0.1);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.playlist-item:hover {
+  background: rgba(10, 14, 26, 0.8);
+  border-color: rgba(74, 158, 255, 0.3);
+}
+
+.playlist-item-thumbnail {
+  width: 50px;
+  height: 50px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.playlist-item-thumbnail-placeholder {
+  width: 50px;
+  height: 50px;
+  border-radius: 4px;
+  background: rgba(74, 158, 255, 0.2);
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  font-weight: 900;
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.playlist-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.playlist-item-name {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.playlist-item-artist {
+  font-size: 0.85rem;
+  color: #7b8ca8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 @media (max-width: 768px) {

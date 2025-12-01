@@ -101,7 +101,16 @@
           <div class="review-header">
             <div class="user-icon">👤</div>
             <div class="review-meta">
-              <span class="reviewer-name">{{ review.reviewer }} reviewed</span>
+              <span
+                class="reviewer-name clickable-username"
+                @click="navigateToUserProfile(review.reviewerId)"
+                v-if="review.reviewerId"
+              >
+                {{ review.reviewer }} reviewed
+              </span>
+              <span class="reviewer-name" v-else
+                >{{ review.reviewer }} reviewed</span
+              >
             </div>
           </div>
           <div
@@ -164,7 +173,14 @@
               v-for="comment in review.comments"
               :key="comment.commentId"
             >
-              <span class="comment-user"
+              <span
+                class="comment-user clickable-username"
+                @click="navigateToUserProfile(comment.commenter)"
+                v-if="comment.commenter"
+              >
+                {{ comment.commenterUsername || comment.commenter }}:
+              </span>
+              <span class="comment-user" v-else
                 >{{ comment.commenterUsername || comment.commenter }}:</span
               >
               <span class="comment-text">{{ comment.notes }}</span>
@@ -652,6 +668,36 @@ export default {
     // Expose userId for use in methods (Options API)
     const getUserId = () => userId.value;
 
+    // Navigate to user profile by username
+    const navigateToUserProfile = async (targetUserId) => {
+      if (!targetUserId) return;
+
+      try {
+        // Get username from userId
+        const result = await auth.getUsername(targetUserId);
+        if (result && result.error) {
+          console.error(
+            "[Home] Error getting username for navigation:",
+            result.error
+          );
+          return;
+        }
+
+        // API returns an array: [{ "username": "String" }]
+        const usernameData =
+          Array.isArray(result) && result.length > 0 ? result[0] : result;
+        const targetUsername = usernameData?.username;
+
+        if (targetUsername) {
+          router.push(`/profile/${encodeURIComponent(targetUsername)}`);
+        } else {
+          console.error("[Home] Username not found for userId:", targetUserId);
+        }
+      } catch (error) {
+        console.error("[Home] Error navigating to user profile:", error);
+      }
+    };
+
     return {
       favoritesItems,
       listenLaterItems,
@@ -665,6 +711,7 @@ export default {
       getUserId,
       userId: computed(() => userId.value),
       showToastNotification,
+      navigateToUserProfile,
     };
   },
   data() {
@@ -893,6 +940,7 @@ export default {
                 allReviews.push({
                   id: reviewId,
                   reviewer: reviewerName,
+                  reviewerId: userId, // Store userId for navigation
                   song: songName,
                   artist: songArtist,
                   album: songAlbum,
@@ -949,7 +997,7 @@ export default {
     },
     loadMoreReviews() {
       if (this.loadingMoreReviews || !this.reviewsHasMore) return;
-      
+
       this.loadingMoreReviews = true;
       this.reviewsLimit += 10;
       this.reviewsHasMore = this.allReviews.length > this.reviewsLimit;
@@ -1285,6 +1333,15 @@ export default {
 .reviewer-name {
   color: #ffffff;
   font-weight: 600;
+}
+
+.clickable-username {
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.clickable-username:hover {
+  color: #4a9eff;
 }
 
 .song-details {

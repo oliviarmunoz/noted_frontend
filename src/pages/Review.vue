@@ -182,7 +182,14 @@
             :class="{ 'newly-added': newlyAddedReviewId === review.id }"
           >
             <div class="activity-header">
-              <span class="activity-text">{{
+              <span
+                class="activity-text clickable-username"
+                @click="navigateToUserProfile(review.userId)"
+                v-if="review.userId"
+              >
+                {{ review.username || review.userId }}
+              </span>
+              <span class="activity-text" v-else>{{
                 review.username || review.userId
               }}</span>
             </div>
@@ -304,7 +311,7 @@
 
 <script>
 import { ref, computed, watch, onMounted } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { review, musicDiscovery, auth } from "../api/api.js";
 import { usePlaylists } from "../composables/usePlaylists.js";
 import { useToast } from "../composables/useToast.js";
@@ -315,6 +322,7 @@ export default {
   name: "Review",
   setup() {
     const route = useRoute();
+    const router = useRouter();
     const { currentUser } = useAuth();
 
     // State management
@@ -582,7 +590,7 @@ export default {
         );
         // Filter out any null reviews (from errors)
         allReviews.value = allReviews.value.filter((r) => r !== null);
-        
+
         // Limit displayed reviews
         reviewsHasMore.value = allReviews.value.length > reviewsLimit.value;
         displayedReviews.value = allReviews.value.slice(0, reviewsLimit.value);
@@ -1062,7 +1070,7 @@ export default {
     // Load more reviews
     const loadMoreReviews = () => {
       if (loadingMoreReviews.value || !reviewsHasMore.value) return;
-      
+
       loadingMoreReviews.value = true;
       reviewsLimit.value += 20;
       reviewsHasMore.value = allReviews.value.length > reviewsLimit.value;
@@ -1092,6 +1100,39 @@ export default {
           "_blank",
           "noopener,noreferrer"
         );
+      }
+    };
+
+    // Navigate to user profile by username
+    const navigateToUserProfile = async (targetUserId) => {
+      if (!targetUserId) return;
+
+      try {
+        // Get username from userId
+        const result = await auth.getUsername(targetUserId);
+        if (result && result.error) {
+          console.error(
+            "[Review] Error getting username for navigation:",
+            result.error
+          );
+          return;
+        }
+
+        // API returns an array: [{ "username": "String" }]
+        const usernameData =
+          Array.isArray(result) && result.length > 0 ? result[0] : result;
+        const targetUsername = usernameData?.username;
+
+        if (targetUsername) {
+          router.push(`/profile/${encodeURIComponent(targetUsername)}`);
+        } else {
+          console.error(
+            "[Review] Username not found for userId:",
+            targetUserId
+          );
+        }
+      } catch (error) {
+        console.error("[Review] Error navigating to user profile:", error);
       }
     };
 
@@ -1131,6 +1172,7 @@ export default {
       loadMoreReviews,
       reviewsHasMore,
       loadingMoreReviews,
+      navigateToUserProfile,
     };
   },
 };
@@ -1745,6 +1787,15 @@ export default {
 .activity-text {
   color: #ffffff;
   font-weight: 600;
+}
+
+.clickable-username {
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.clickable-username:hover {
+  color: #4a9eff;
 }
 
 .activity-rating {

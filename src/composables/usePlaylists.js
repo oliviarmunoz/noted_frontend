@@ -10,49 +10,6 @@ export function usePlaylists() {
   const { loadEntityByExternalId } = useEntities();
 
   /**
-   * Ensure a playlist exists, creating it if necessary
-   * @param {string} playlistName - Name of the playlist
-   * @returns {Promise<boolean>}
-   */
-  const ensurePlaylistExists = async (playlistName) => {
-    try {
-      const userId = getUserId();
-      if (!userId) {
-        console.error('[usePlaylists] No userId found in localStorage');
-        return false;
-      }
-
-      const playlists = await playlist.getUserPlaylists(userId);
-      
-      if (playlists && playlists.error) {
-        console.error(`[usePlaylists] Error getting playlists:`, playlists.error);
-        return false;
-      }
-
-      const exists = (playlists || []).some(
-        (p) => p.name === playlistName
-      );
-
-      if (!exists) {
-        const result = await playlist.createPlaylist(userId, playlistName);
-        if (result && result.error) {
-          // If playlist already exists, that's fine - treat as success
-          if (result.error.includes("already exists")) {
-            return true;
-          }
-          console.error(`[usePlaylists] Error creating playlist ${playlistName}:`, result.error);
-          return false;
-        }
-      }
-
-      return true;
-    } catch (error) {
-      console.error(`[usePlaylists] Error ensuring playlist ${playlistName} exists:`, error);
-      return false;
-    }
-  };
-
-  /**
    * Add an item to a playlist
    * @param {string} itemId - The externalId (Spotify ID) of the item to add
    * @param {string} playlistName - Name of the playlist
@@ -65,13 +22,8 @@ export function usePlaylists() {
         return { success: false, error: 'No userId found in localStorage' };
       }
 
-      // Ensure playlist exists
-      const playlistExists = await ensurePlaylistExists(playlistName);
-      if (!playlistExists) {
-        return { success: false, error: `Could not create ${playlistName} playlist` };
-      }
-
       // Add item to playlist using externalId
+      // Note: Backend creates playlists automatically, so we don't need to create them here
       const addResult = await playlist.addItem(userId, itemId, playlistName);
 
       if (addResult && addResult.error) {
@@ -86,37 +38,46 @@ export function usePlaylists() {
   };
 
   /**
-   * Load all items from a playlist with their entity details
+   * Load items from a playlist with their entity details
    * @param {string} playlistName - Name of the playlist
-   * @returns {Promise<{items: Array, error: string|null}>}
+   * @param {number} limit - Maximum number of items to load (default: 20)
+   * @param {number} offset - Number of items to skip (default: 0)
+   * @returns {Promise<{items: Array, error: string|null, hasMore: boolean, total: number}>}
    */
-  const loadPlaylistItems = async (playlistName) => {
+  const loadPlaylistItems = async (playlistName, limit = 20, offset = 0) => {
     try {
       const userId = getUserId();
       if (!userId) {
-        return { items: [], error: 'No userId found in localStorage' };
+        return { items: [], error: 'No userId found in localStorage', hasMore: false, total: 0 };
       }
 
       const items = await playlist.getPlaylistItems(userId, playlistName);
 
       if (items && items.error) {
-        return { items: [], error: items.error };
+        return { items: [], error: items.error, hasMore: false, total: 0 };
       }
 
-      // Get entity details for each item
+      const allItems = items || [];
+      const total = allItems.length;
+      
+      // Slice the items based on limit and offset
+      const paginatedItems = allItems.slice(offset, offset + limit);
+      const hasMore = offset + limit < total;
+
+      // Get entity details for each item (only for the paginated subset)
       // Items are stored as externalId (Spotify ID) in the playlist
       const itemDetails = await Promise.all(
-        (items || []).map(async (itemObj) => {
+        paginatedItems.map(async (itemObj) => {
           const itemId = itemObj.item || itemObj;
           console.log(`[usePlaylists] Loading details for playlist item: ${itemId}`);
           return await loadEntityByExternalId(itemId);
         })
       );
 
-      return { items: itemDetails, error: null };
+      return { items: itemDetails, error: null, hasMore, total };
     } catch (error) {
       console.error(`[usePlaylists] Error loading ${playlistName} playlist:`, error);
-      return { items: [], error: error.message || "Failed to load playlist" };
+      return { items: [], error: error.message || "Failed to load playlist", hasMore: false, total: 0 };
     }
   };
 
@@ -147,7 +108,6 @@ export function usePlaylists() {
   };
 
   return {
-    ensurePlaylistExists,
     addItemToPlaylist,
     loadPlaylistItems,
     removeItemFromPlaylist,

@@ -177,6 +177,15 @@
             </button>
           </div>
         </div>
+        <div v-if="reviewsHasMore" class="load-more-feed">
+          <button
+            @click="loadMoreReviews"
+            class="load-more-btn"
+            :disabled="loadingMoreReviews"
+          >
+            {{ loadingMoreReviews ? "Loading..." : "Load More Reviews" }}
+          </button>
+        </div>
       </main>
     </div>
   </div>
@@ -233,7 +242,8 @@ export default {
       favoritesError.value = null;
 
       try {
-        const result = await loadPlaylistItems("Favorites");
+        // Load only first 10 items for sidebar
+        const result = await loadPlaylistItems("Favorites", 10, 0);
         if (result.error) {
           favoritesError.value = result.error;
           favoritesItems.value = [];
@@ -387,7 +397,8 @@ export default {
       listenLaterError.value = null;
 
       try {
-        const result = await loadPlaylistItems("Listen Later");
+        // Load only first 10 items for sidebar
+        const result = await loadPlaylistItems("Listen Later", 10, 0);
         if (result.error) {
           listenLaterError.value = result.error;
           listenLaterItems.value = [];
@@ -639,10 +650,14 @@ export default {
   },
   data() {
     return {
+      allReviews: [],
       reviews: [],
       loading: true,
       error: null,
       commentInputs: {},
+      reviewsLimit: 10,
+      reviewsHasMore: false,
+      loadingMoreReviews: false,
     };
   },
   async mounted() {
@@ -899,13 +914,26 @@ export default {
           return 0;
         });
 
-        this.reviews = allReviews;
+        // Store all reviews and limit displayed ones
+        this.allReviews = allReviews;
+        this.reviewsLimit = 10;
+        this.reviewsHasMore = allReviews.length > this.reviewsLimit;
+        this.reviews = allReviews.slice(0, this.reviewsLimit);
       } catch (err) {
         console.error("Error loading feed:", err);
         this.error = err.message || "Failed to load feed";
       } finally {
         this.loading = false;
       }
+    },
+    loadMoreReviews() {
+      if (this.loadingMoreReviews || !this.reviewsHasMore) return;
+      
+      this.loadingMoreReviews = true;
+      this.reviewsLimit += 10;
+      this.reviewsHasMore = this.allReviews.length > this.reviewsLimit;
+      this.reviews = this.allReviews.slice(0, this.reviewsLimit);
+      this.loadingMoreReviews = false;
     },
     async handleAddComment(reviewId) {
       if (!reviewId) {
@@ -1425,6 +1453,36 @@ export default {
 
 .error {
   color: #ff6b9d;
+}
+
+.load-more-feed {
+  margin-top: 2rem;
+  text-align: center;
+  padding-top: 2rem;
+  border-top: 1px solid rgba(123, 140, 168, 0.2);
+}
+
+.load-more-btn {
+  padding: 0.75rem 2rem;
+  background: rgba(74, 158, 255, 0.1);
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  border-radius: 4px;
+  color: #4a9eff;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.load-more-btn:hover:not(:disabled) {
+  background: rgba(74, 158, 255, 0.2);
+  border-color: #4a9eff;
+  transform: translateY(-1px);
+}
+
+.load-more-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 @media (max-width: 968px) {

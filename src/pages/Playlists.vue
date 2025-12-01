@@ -17,36 +17,46 @@
         <div v-else-if="favoritesItems.length === 0" class="empty-state">
           <p>No favorites yet. Start adding songs to your favorites!</p>
         </div>
-        <ul v-else class="playlist-items">
-          <li
-            v-for="item in favoritesItems"
-            :key="item.item"
-            class="playlist-item"
-          >
-            <div class="item-content" @click="navigateToReview(item)">
-              <img
-                v-if="item.imageUrl"
-                :src="item.imageUrl"
-                :alt="item.name"
-                class="item-thumbnail"
-              />
-              <div v-else class="item-thumbnail-placeholder">
-                {{ item.name?.charAt(0) || "?" }}
-              </div>
-              <div class="item-info">
-                <div class="item-name">{{ item.name || "Unknown" }}</div>
-                <div class="item-artist">{{ item.artist || "" }}</div>
-              </div>
-            </div>
-            <button
-              class="remove-item-btn"
-              @click.stop="removeFromPlaylist(item, 'Favorites')"
-              title="Remove from Favorites"
+        <div
+          v-else
+          class="playlist-items-container"
+          @scroll="handleScroll($event, 'Favorites')"
+        >
+          <ul class="playlist-items">
+            <li
+              v-for="item in favoritesItems"
+              :key="item.item"
+              class="playlist-item"
             >
-              ×
-            </button>
-          </li>
-        </ul>
+              <div class="item-content" @click="navigateToReview(item)">
+                <img
+                  v-if="item.imageUrl"
+                  :src="item.imageUrl"
+                  :alt="item.name"
+                  class="item-thumbnail"
+                />
+                <div v-else class="item-thumbnail-placeholder">
+                  {{ item.name?.charAt(0) || "?" }}
+                </div>
+                <div class="item-info">
+                  <div class="item-name">{{ item.name || "Unknown" }}</div>
+                  <div class="item-artist">{{ item.artist || "" }}</div>
+                </div>
+              </div>
+              <button
+                class="remove-item-btn"
+                @click.stop="removeFromPlaylist(item, 'Favorites')"
+                title="Remove from Favorites"
+              >
+                ×
+              </button>
+            </li>
+          </ul>
+          <div v-if="favoritesLoadingMore" class="loading-more">Loading more...</div>
+          <div v-else-if="!favoritesHasMore && favoritesItems.length > 0" class="end-message">
+            All favorites loaded
+          </div>
+        </div>
       </div>
 
       <!-- Listen Later Section -->
@@ -63,36 +73,46 @@
         <div v-else-if="listenLaterItems.length === 0" class="empty-state">
           <p>No songs in your listen later list. Add songs to listen to later!</p>
         </div>
-        <ul v-else class="playlist-items">
-          <li
-            v-for="item in listenLaterItems"
-            :key="item.item"
-            class="playlist-item"
-          >
-            <div class="item-content" @click="navigateToReview(item)">
-              <img
-                v-if="item.imageUrl"
-                :src="item.imageUrl"
-                :alt="item.name"
-                class="item-thumbnail"
-              />
-              <div v-else class="item-thumbnail-placeholder">
-                {{ item.name?.charAt(0) || "?" }}
-              </div>
-              <div class="item-info">
-                <div class="item-name">{{ item.name || "Unknown" }}</div>
-                <div class="item-artist">{{ item.artist || "" }}</div>
-              </div>
-            </div>
-            <button
-              class="remove-item-btn"
-              @click.stop="removeFromPlaylist(item, 'Listen Later')"
-              title="Remove from Listen Later"
+        <div
+          v-else
+          class="playlist-items-container"
+          @scroll="handleScroll($event, 'Listen Later')"
+        >
+          <ul class="playlist-items">
+            <li
+              v-for="item in listenLaterItems"
+              :key="item.item"
+              class="playlist-item"
             >
-              ×
-            </button>
-          </li>
-        </ul>
+              <div class="item-content" @click="navigateToReview(item)">
+                <img
+                  v-if="item.imageUrl"
+                  :src="item.imageUrl"
+                  :alt="item.name"
+                  class="item-thumbnail"
+                />
+                <div v-else class="item-thumbnail-placeholder">
+                  {{ item.name?.charAt(0) || "?" }}
+                </div>
+                <div class="item-info">
+                  <div class="item-name">{{ item.name || "Unknown" }}</div>
+                  <div class="item-artist">{{ item.artist || "" }}</div>
+                </div>
+              </div>
+              <button
+                class="remove-item-btn"
+                @click.stop="removeFromPlaylist(item, 'Listen Later')"
+                title="Remove from Listen Later"
+              >
+                ×
+              </button>
+            </li>
+          </ul>
+          <div v-if="listenLaterLoadingMore" class="loading-more">Loading more...</div>
+          <div v-else-if="!listenLaterHasMore && listenLaterItems.length > 0" class="end-message">
+            All songs loaded
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -119,6 +139,11 @@ export default {
     const loadingListenLater = ref(false);
     const favoritesError = ref(null);
     const listenLaterError = ref(null);
+    const favoritesHasMore = ref(false);
+    const listenLaterHasMore = ref(false);
+    const favoritesLoadingMore = ref(false);
+    const listenLaterLoadingMore = ref(false);
+    const ITEMS_PER_PAGE = 20;
 
     // Use composables
     const { loadPlaylistItems, removeItemFromPlaylist } = usePlaylists();
@@ -126,46 +151,78 @@ export default {
     const { playlistUpdateEvent } = usePlaylistEvents();
 
     // Load favorites
-    const loadFavorites = async () => {
-      loadingFavorites.value = true;
-      favoritesError.value = null;
+    const loadFavorites = async (loadMore = false) => {
+      if (loadMore) {
+        favoritesLoadingMore.value = true;
+      } else {
+        loadingFavorites.value = true;
+        favoritesError.value = null;
+        favoritesItems.value = [];
+      }
 
       try {
-        const result = await loadPlaylistItems("Favorites");
+        const offset = loadMore ? favoritesItems.value.length : 0;
+        const result = await loadPlaylistItems("Favorites", ITEMS_PER_PAGE, offset);
         if (result.error) {
           favoritesError.value = result.error;
-          favoritesItems.value = [];
+          if (!loadMore) {
+            favoritesItems.value = [];
+          }
         } else {
-          favoritesItems.value = result.items;
+          if (loadMore) {
+            favoritesItems.value = [...favoritesItems.value, ...result.items];
+          } else {
+            favoritesItems.value = result.items;
+          }
+          favoritesHasMore.value = result.hasMore;
         }
       } catch (error) {
         console.error("[Playlists] Error loading favorites:", error);
         favoritesError.value = error.message || "Failed to load favorites";
-        favoritesItems.value = [];
+        if (!loadMore) {
+          favoritesItems.value = [];
+        }
       } finally {
         loadingFavorites.value = false;
+        favoritesLoadingMore.value = false;
       }
     };
 
     // Load listen later
-    const loadListenLater = async () => {
-      loadingListenLater.value = true;
-      listenLaterError.value = null;
+    const loadListenLater = async (loadMore = false) => {
+      if (loadMore) {
+        listenLaterLoadingMore.value = true;
+      } else {
+        loadingListenLater.value = true;
+        listenLaterError.value = null;
+        listenLaterItems.value = [];
+      }
 
       try {
-        const result = await loadPlaylistItems("Listen Later");
+        const offset = loadMore ? listenLaterItems.value.length : 0;
+        const result = await loadPlaylistItems("Listen Later", ITEMS_PER_PAGE, offset);
         if (result.error) {
           listenLaterError.value = result.error;
-          listenLaterItems.value = [];
+          if (!loadMore) {
+            listenLaterItems.value = [];
+          }
         } else {
-          listenLaterItems.value = result.items;
+          if (loadMore) {
+            listenLaterItems.value = [...listenLaterItems.value, ...result.items];
+          } else {
+            listenLaterItems.value = result.items;
+          }
+          listenLaterHasMore.value = result.hasMore;
         }
       } catch (error) {
         console.error("[Playlists] Error loading listen later:", error);
         listenLaterError.value = error.message || "Failed to load listen later";
-        listenLaterItems.value = [];
+        if (!loadMore) {
+          listenLaterItems.value = [];
+        }
       } finally {
         loadingListenLater.value = false;
+        listenLaterLoadingMore.value = false;
       }
     };
 
@@ -230,6 +287,21 @@ export default {
       loadListenLater();
     });
 
+    // Handle scroll for infinite loading
+    const handleScroll = (event, playlistName) => {
+      const target = event.target;
+      const scrollBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
+      
+      // Load more when within 200px of bottom
+      if (scrollBottom < 200) {
+        if (playlistName === "Favorites" && favoritesHasMore.value && !favoritesLoadingMore.value && !loadingFavorites.value) {
+          loadFavorites(true);
+        } else if (playlistName === "Listen Later" && listenLaterHasMore.value && !listenLaterLoadingMore.value && !loadingListenLater.value) {
+          loadListenLater(true);
+        }
+      }
+    };
+
     return {
       favoritesItems,
       listenLaterItems,
@@ -237,8 +309,15 @@ export default {
       loadingListenLater,
       favoritesError,
       listenLaterError,
+      favoritesHasMore,
+      listenLaterHasMore,
+      favoritesLoadingMore,
+      listenLaterLoadingMore,
       navigateToReview,
       removeFromPlaylist,
+      handleScroll,
+      loadFavorites,
+      loadListenLater,
     };
   },
 };
@@ -314,6 +393,30 @@ export default {
   font-size: 1rem;
 }
 
+.playlist-items-container {
+  max-height: 600px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.playlist-items-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.playlist-items-container::-webkit-scrollbar-track {
+  background: rgba(10, 14, 26, 0.3);
+  border-radius: 4px;
+}
+
+.playlist-items-container::-webkit-scrollbar-thumb {
+  background: rgba(74, 158, 255, 0.3);
+  border-radius: 4px;
+}
+
+.playlist-items-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(74, 158, 255, 0.5);
+}
+
 .playlist-items {
   list-style: none;
   padding: 0;
@@ -321,6 +424,19 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+.loading-more,
+.end-message {
+  padding: 1rem;
+  text-align: center;
+  color: #7b8ca8;
+  font-size: 0.9rem;
+  margin-top: 1rem;
+}
+
+.loading-more {
+  color: #4a9eff;
 }
 
 .playlist-item {

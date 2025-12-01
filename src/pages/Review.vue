@@ -176,6 +176,15 @@
             </div>
           </div>
         </transition-group>
+        <div v-if="reviewsHasMore" class="load-more-reviews">
+          <button
+            @click="loadMoreReviews"
+            class="load-more-btn"
+            :disabled="loadingMoreReviews"
+          >
+            {{ loadingMoreReviews ? "Loading..." : "Load More Reviews" }}
+          </button>
+        </div>
       </div>
 
       <transition name="toast">
@@ -250,6 +259,9 @@ export default {
     const savingReview = ref(false);
     const reviewError = ref(null);
     const reviewsError = ref(null);
+    const reviewsLimit = ref(20);
+    const reviewsHasMore = ref(false);
+    const loadingMoreReviews = ref(false);
     const hoverRating = ref(0);
     const commentInputs = ref({});
     const newlyAddedReviewId = ref(null);
@@ -339,9 +351,10 @@ export default {
 
     // All reviews for this item
     const allReviews = ref([]);
+    const displayedReviews = ref([]);
     const otherReviews = computed(() => {
-      if (!allReviews.value || !userId.value) return [];
-      return allReviews.value;
+      if (!displayedReviews.value || !userId.value) return [];
+      return displayedReviews.value;
     });
 
     const hasReview = computed(() => myReview.value !== null);
@@ -499,10 +512,15 @@ export default {
         );
         // Filter out any null reviews (from errors)
         allReviews.value = allReviews.value.filter((r) => r !== null);
+        
+        // Limit displayed reviews
+        reviewsHasMore.value = allReviews.value.length > reviewsLimit.value;
+        displayedReviews.value = allReviews.value.slice(0, reviewsLimit.value);
       } catch (err) {
         console.error("Error loading reviews:", err);
         reviewsError.value = err.message || "Failed to load reviews";
         allReviews.value = [];
+        displayedReviews.value = [];
       } finally {
         loadingReviews.value = false;
       }
@@ -609,7 +627,7 @@ export default {
         }
 
         // reload all reviews
-        await loadReviews();
+        await loadAllReviews();
         reviewError.value = null;
 
         // new review, highlight it in the reviews section
@@ -693,7 +711,7 @@ export default {
         myNotes.value = "";
 
         // reload all reviews
-        await loadReviews();
+        await loadAllReviews();
       } catch (err) {
         reviewError.value = err.message || "Failed to delete review";
         console.error("Error deleting review:", err);
@@ -749,6 +767,9 @@ export default {
         } else {
           await loadAllReviews();
         }
+        // Update displayed reviews after reload
+        reviewsHasMore.value = allReviews.value.length > reviewsLimit.value;
+        displayedReviews.value = allReviews.value.slice(0, reviewsLimit.value);
       } catch (err) {
         reviewError.value = err.message || "Failed to add comment";
         console.error("Error adding comment:", err);
@@ -802,6 +823,9 @@ export default {
         } else {
           await loadAllReviews();
         }
+        // Update displayed reviews after reload
+        reviewsHasMore.value = allReviews.value.length > reviewsLimit.value;
+        displayedReviews.value = allReviews.value.slice(0, reviewsLimit.value);
       } catch (err) {
         reviewError.value = err.message || "Failed to delete comment";
         console.error("Error deleting comment:", err);
@@ -961,6 +985,17 @@ export default {
       }
     };
 
+    // Load more reviews
+    const loadMoreReviews = () => {
+      if (loadingMoreReviews.value || !reviewsHasMore.value) return;
+      
+      loadingMoreReviews.value = true;
+      reviewsLimit.value += 20;
+      reviewsHasMore.value = allReviews.value.length > reviewsLimit.value;
+      displayedReviews.value = allReviews.value.slice(0, reviewsLimit.value);
+      loadingMoreReviews.value = false;
+    };
+
     // format release date
     const formatReleaseDate = (dateString) => {
       if (!dateString) return "Unknown";
@@ -1007,6 +1042,9 @@ export default {
       showDeleteModal,
       deleteModalType,
       confirmDelete,
+      loadMoreReviews,
+      reviewsHasMore,
+      loadingMoreReviews,
     };
   },
 };
@@ -1529,6 +1567,36 @@ export default {
 .activity-rating {
   display: flex;
   gap: 0.25rem;
+}
+
+.load-more-reviews {
+  margin-top: 2rem;
+  text-align: center;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(123, 140, 168, 0.2);
+}
+
+.load-more-btn {
+  padding: 0.75rem 2rem;
+  background: rgba(74, 158, 255, 0.1);
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  border-radius: 4px;
+  color: #4a9eff;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.load-more-btn:hover:not(:disabled) {
+  background: rgba(74, 158, 255, 0.2);
+  border-color: #4a9eff;
+  transform: translateY(-1px);
+}
+
+.load-more-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* Modal Styles */

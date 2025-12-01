@@ -55,27 +55,52 @@
                   <div class="result-artist" v-if="result.artistName">
                     {{ result.artistName }}
                   </div>
-                  <div class="result-type">{{ result.type || 'track' }}</div>
+                  <div class="result-type">{{ result.type || "track" }}</div>
                 </div>
               </div>
 
               <!-- Keep playlist buttons from first App.vue -->
               <div class="result-actions">
                 <button
-                  class="playlist-btn"
+                  class="playlist-btn favorites-btn"
                   @click.stop="addToPlaylist(result, 'Favorites')"
                   :disabled="addingToPlaylist[result._id || result.uri]"
                   title="Add to Favorites"
                 >
-                  ♥
+                  <svg
+                    class="playlist-icon"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
+                    />
+                  </svg>
                 </button>
                 <button
-                  class="playlist-btn"
+                  class="playlist-btn listen-later-btn"
                   @click.stop="addToPlaylist(result, 'Listen Later')"
                   :disabled="addingToPlaylist[result._id || result.uri]"
                   title="Add to Listen Later"
                 >
-                  ⏱
+                  <svg
+                    class="playlist-icon"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                  </svg>
                 </button>
               </div>
             </div>
@@ -493,8 +518,10 @@ export default {
   color: #4a9eff;
   cursor: pointer;
   transition: all 0.2s ease;
-  font-size: 1rem;
+  font-size: 1.2rem;
+  line-height: 1;
   padding: 0;
+  flex-shrink: 0;
 }
 
 .playlist-btn:hover:not(:disabled) {
@@ -506,6 +533,36 @@ export default {
 .playlist-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.playlist-btn.favorites-btn {
+  background: rgba(255, 107, 157, 0.1);
+  border: 1px solid rgba(255, 107, 157, 0.3);
+  color: #ff6b9d;
+}
+
+.playlist-btn.favorites-btn:hover:not(:disabled) {
+  background: rgba(255, 107, 157, 0.2);
+  border-color: #ff6b9d;
+  transform: scale(1.1);
+}
+
+.playlist-btn.listen-later-btn {
+  background: rgba(123, 104, 238, 0.1);
+  border: 1px solid rgba(123, 104, 238, 0.3);
+  color: #7b68ee;
+}
+
+.playlist-btn.listen-later-btn:hover:not(:disabled) {
+  background: rgba(123, 104, 238, 0.2);
+  border-color: #7b68ee;
+  transform: scale(1.1);
+}
+
+.playlist-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
 }
 
 .result-image {
@@ -673,7 +730,7 @@ export default {
   .nav-links {
     gap: 1rem;
     flex-wrap: wrap;
-    justify-content:center;
+    justify-content: center;
   }
 
   .nav-search {

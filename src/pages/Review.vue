@@ -19,18 +19,45 @@
           <div class="playlist-buttons">
             <button
               @click="handleTogglePlaylist('Favorites')"
-              class="playlist-action-btn"
+              class="playlist-action-btn favorites-btn"
               :class="{ 'is-active': isInFavorites }"
               :title="
                 isInFavorites ? 'Remove from Favorites' : 'Add to Favorites'
               "
             >
-              <span class="playlist-icon">{{ isInFavorites ? "♥" : "♡" }}</span>
+              <svg
+                v-if="isInFavorites"
+                class="playlist-icon"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                xmlns="http://www.w3.org/2000/svg"
+                style="vertical-align: middle"
+              >
+                <path
+                  d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
+                />
+              </svg>
+              <svg
+                v-else
+                class="playlist-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                xmlns="http://www.w3.org/2000/svg"
+                style="vertical-align: middle"
+              >
+                <path
+                  d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
+                />
+              </svg>
               <span class="playlist-text">Favorites</span>
             </button>
             <button
               @click="handleTogglePlaylist('Listen Later')"
-              class="playlist-action-btn"
+              class="playlist-action-btn listen-later-btn"
               :class="{ 'is-active': isInListenLater }"
               :title="
                 isInListenLater
@@ -38,33 +65,28 @@
                   : 'Add to Listen Later'
               "
             >
-              <span class="playlist-icon">⏱</span>
+              <svg
+                class="playlist-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                xmlns="http://www.w3.org/2000/svg"
+                style="vertical-align: middle"
+              >
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+              </svg>
               <span class="playlist-text">Listen Later</span>
             </button>
           </div>
         </div>
 
         <div class="song-info">
-          <h1 class="song-title">{{ songInfo.name || "Unknown Song" }}</h1>
-          <p class="song-artist">
-            {{ songInfo.artist || "Unknown Artist" }}
-          </p>
-
-          <div class="rating-section">
-            <span class="rating-label">My Rating:</span>
-            <div class="rating">
-              <span
-                v-for="i in 5"
-                :key="i"
-                class="star"
-                :class="{ filled: i <= (hoverRating || myRating) }"
-                @click="handleRatingChange(i)"
-                @mouseenter="hoverRating = i"
-                @mouseleave="hoverRating = 0"
-              >
-                ★
-              </span>
-            </div>
+          <div class="title-row">
+            <h1 class="song-title">{{ songInfo.name || "Unknown Song" }}</h1>
             <button
               v-if="hasReview"
               @click="handleDeleteReview"
@@ -72,6 +94,56 @@
             >
               Delete Review
             </button>
+          </div>
+          <p class="song-artist">
+            {{ songInfo.artist || "Unknown Artist" }}
+          </p>
+
+          <div class="rating-section">
+            <div class="rating-group">
+              <span class="rating-label">My Rating:</span>
+              <div class="rating">
+                <span
+                  v-for="i in 5"
+                  :key="i"
+                  class="star"
+                  :class="{ filled: i <= (hoverRating || myRating) }"
+                  @click="handleRatingChange(i)"
+                  @mouseenter="hoverRating = i"
+                  @mouseleave="hoverRating = 0"
+                >
+                  ★
+                </span>
+              </div>
+            </div>
+            <div class="action-buttons">
+              <button
+                v-if="songInfo.externalURL"
+                class="spotify-btn"
+                @click="openInSpotify"
+              >
+                <svg
+                  class="spotify-icon"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.84-.179-.84-.66 0-.359.24-.66.54-.779 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.24 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.42 1.56-.299.421-1.02.599-1.559.3z"
+                  />
+                </svg>
+                <span class="spotify-label">Open in Spotify</span>
+              </button>
+              <button
+                class="action-btn"
+                @click="handleSaveReview"
+                :disabled="savingReview"
+              >
+                <span class="action-label">{{
+                  hasReview ? "Update Review" : "Submit Review"
+                }}</span>
+              </button>
+            </div>
           </div>
 
           <div class="song-meta">
@@ -91,17 +163,6 @@
               placeholder="Add your notes here..."
               v-model="myNotes"
             ></textarea>
-          </div>
-          <div class="action-buttons">
-            <button
-              class="action-btn"
-              @click="handleSaveReview"
-              :disabled="savingReview"
-            >
-              <span class="action-label">{{
-                hasReview ? "Update Review" : "Submit Review"
-              }}</span>
-            </button>
           </div>
           <div v-if="reviewError" class="review-error">{{ reviewError }}</div>
         </div>
@@ -147,8 +208,12 @@
                 v-for="comment in review.comments"
                 :key="comment.commentId"
               >
-                <span class="comment-user">{{ comment.commenterUsername || comment.commenter }}:</span>
-                <span class="comment-text">{{ comment.notes || comment.comment }}</span>
+                <span class="comment-user"
+                  >{{ comment.commenterUsername || comment.commenter }}:</span
+                >
+                <span class="comment-text">{{
+                  comment.notes || comment.comment
+                }}</span>
                 <button
                   v-if="comment.commenter === userId"
                   @click="handleDeleteComment(review.id, comment.commentId)"
@@ -336,6 +401,7 @@ export default {
             albumArt: musicEntity.imageUrl || null,
             releaseDate: musicEntity.releaseDate || null,
             externalId: musicEntity.externalId || null,
+            externalURL: musicEntity.externalURL || null,
           };
         }
       } catch (err) {
@@ -390,13 +456,15 @@ export default {
     // Helper function to fetch usernames for comments
     const enrichCommentsWithUsernames = async (comments) => {
       if (!comments || comments.length === 0) return [];
-      
+
       return await Promise.all(
         comments.map(async (comment) => {
           let commenterUsername = comment.commenter;
           if (comment.commenter) {
             try {
-              const usernameResponse = await auth.getUsername(comment.commenter);
+              const usernameResponse = await auth.getUsername(
+                comment.commenter
+              );
               // _getUsername returns an array: [{ username: "String" }]
               if (usernameResponse && !usernameResponse.error) {
                 if (
@@ -491,7 +559,9 @@ export default {
                 console.error(`Error loading comments:`, reviewComments.error);
               } else {
                 // Fetch usernames for each commenter
-                comments = await enrichCommentsWithUsernames(reviewComments || []);
+                comments = await enrichCommentsWithUsernames(
+                  reviewComments || []
+                );
               }
             } catch (err) {
               console.error(
@@ -755,7 +825,9 @@ export default {
               console.error(`Error reloading comments:`, updatedComments.error);
             } else {
               // Fetch usernames for the updated comments
-              targetReview.comments = await enrichCommentsWithUsernames(updatedComments || []);
+              targetReview.comments = await enrichCommentsWithUsernames(
+                updatedComments || []
+              );
             }
           } catch (err) {
             console.error(
@@ -811,7 +883,9 @@ export default {
               console.error(`Error reloading comments:`, updatedComments.error);
             } else {
               // Fetch usernames for the updated comments
-              targetReview.comments = await enrichCommentsWithUsernames(updatedComments || []);
+              targetReview.comments = await enrichCommentsWithUsernames(
+                updatedComments || []
+              );
             }
           } catch (err) {
             console.error(
@@ -1010,6 +1084,17 @@ export default {
       });
     };
 
+    // Open song in Spotify
+    const openInSpotify = () => {
+      if (songInfo.value?.externalURL) {
+        window.open(
+          songInfo.value.externalURL,
+          "_blank",
+          "noopener,noreferrer"
+        );
+      }
+    };
+
     return {
       itemId,
       userId: computed(() => userId.value),
@@ -1036,6 +1121,7 @@ export default {
       handleDeleteReview,
       handleTogglePlaylist,
       formatReleaseDate,
+      openInSpotify,
       commentInputs,
       handleAddComment,
       handleDeleteComment,
@@ -1078,8 +1164,15 @@ export default {
 .album-section {
   display: flex;
   flex-direction: column;
+  justify-content: flex-start;
   gap: 1rem;
   width: 200px;
+  align-items: flex-start;
+}
+
+.album-section .playlist-buttons {
+  margin-top: 4.5rem;
+  align-self: flex-start;
 }
 
 .album-art {
@@ -1111,6 +1204,14 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+  position: relative;
+}
+
+.title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
 }
 
 .song-title {
@@ -1119,6 +1220,7 @@ export default {
   color: #ffffff;
   margin: 0;
   letter-spacing: -0.02em;
+  flex: 1;
 }
 
 .song-artist {
@@ -1174,37 +1276,71 @@ export default {
   justify-content: center;
   gap: 0.5rem;
   padding: 0.75rem 1rem;
-  background: rgba(74, 158, 255, 0.1);
-  border: 1px solid rgba(74, 158, 255, 0.3);
+  padding-left: calc(1rem + 18px + 0.5rem);
+  background: rgba(10, 14, 26, 0.8);
+  border: 1px solid rgba(123, 140, 168, 0.2);
   border-radius: 4px;
-  color: #4a9eff;
   font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
   width: 100%;
+  position: relative;
 }
 
-.playlist-action-btn:hover {
-  background: rgba(74, 158, 255, 0.2);
-  border-color: #4a9eff;
-  transform: translateY(-1px);
-}
-
-.playlist-action-btn.is-active {
-  background: rgba(255, 107, 157, 0.1);
-  border-color: rgba(255, 107, 157, 0.3);
+.favorites-btn {
   color: #ff6b9d;
 }
 
-.playlist-action-btn.is-active:hover {
-  background: rgba(255, 107, 157, 0.2);
-  border-color: #ff6b9d;
+.favorites-btn:hover {
+  background: rgba(10, 14, 26, 0.95);
+  border-color: rgba(255, 107, 157, 0.4);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(255, 107, 157, 0.15);
+}
+
+.favorites-btn.is-active {
+  background: rgba(10, 14, 26, 0.8);
+  border-color: rgba(123, 140, 168, 0.2);
+  color: #ff6b9d;
+}
+
+.favorites-btn.is-active:hover {
+  background: rgba(10, 14, 26, 0.95);
+  border-color: rgba(255, 107, 157, 0.4);
+  box-shadow: 0 4px 12px rgba(255, 107, 157, 0.15);
+}
+
+.listen-later-btn {
+  color: #7b68ee;
+}
+
+.listen-later-btn:hover {
+  background: rgba(10, 14, 26, 0.95);
+  border-color: rgba(123, 104, 238, 0.4);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(123, 104, 238, 0.15);
+}
+
+.listen-later-btn.is-active {
+  background: rgba(10, 14, 26, 0.8);
+  border-color: rgba(123, 140, 168, 0.2);
+  color: #7b68ee;
+}
+
+.listen-later-btn.is-active:hover {
+  background: rgba(10, 14, 26, 0.95);
+  border-color: rgba(123, 104, 238, 0.4);
+  box-shadow: 0 4px 12px rgba(123, 104, 238, 0.15);
 }
 
 .playlist-icon {
-  font-size: 1.1rem;
-  line-height: 1;
+  width: 18px;
+  height: 18px;
+  position: absolute;
+  left: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 .playlist-text {
@@ -1212,6 +1348,14 @@ export default {
 }
 
 .rating-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.rating-group {
   display: flex;
   align-items: center;
   gap: 1rem;
@@ -1229,7 +1373,6 @@ export default {
 }
 
 .delete-review-btn {
-  margin-left: 1rem;
   padding: 0.5rem 1rem;
   background: rgba(255, 107, 157, 0.1);
   border: 1px solid rgba(255, 107, 157, 0.3);
@@ -1264,28 +1407,63 @@ export default {
 .action-buttons {
   display: flex;
   gap: 1rem;
-  justify-content: flex-end;
+  align-items: center;
 }
 
 .action-btn {
   padding: 0.75rem 2rem;
-  background: linear-gradient(135deg, #4a9eff 0%, #7b68ee 100%);
-  border: none;
+  background: rgba(10, 14, 26, 0.8);
+  border: 1px solid rgba(123, 140, 168, 0.2);
   border-radius: 4px;
-  color: #ffffff;
+  color: #4a9eff;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
 }
 
 .action-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 30px rgba(74, 158, 255, 0.3);
+  background: rgba(10, 14, 26, 0.95);
+  border-color: rgba(74, 158, 255, 0.4);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(74, 158, 255, 0.15);
 }
 
 .action-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.spotify-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  background: rgba(10, 14, 26, 0.8);
+  border: 1px solid rgba(123, 140, 168, 0.2);
+  border-radius: 4px;
+  color: #1db954;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.spotify-btn:hover {
+  background: rgba(10, 14, 26, 0.95);
+  border-color: rgba(29, 185, 84, 0.4);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(29, 185, 84, 0.15);
+}
+
+.spotify-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.spotify-label {
+  font-size: 0.95rem;
 }
 
 .action-label {
@@ -1460,24 +1638,29 @@ export default {
 }
 
 .delete-comment-btn {
-  background: transparent;
-  border: none;
-  color: #ff6b9d;
-  font-size: 1.2rem;
-  cursor: pointer;
-  padding: 0;
   width: 1.5rem;
   height: 1.5rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 2px;
+  background: rgba(255, 107, 157, 0.2);
+  border: 1px solid rgba(255, 107, 157, 0.4);
+  border-radius: 4px;
+  color: #ff6b9d;
+  cursor: pointer;
+  font-size: 1.2rem;
+  line-height: 1;
+  padding: 0;
   transition: all 0.2s ease;
+  flex-shrink: 0;
+  box-shadow: 0 0 6px rgba(255, 107, 157, 0.3);
 }
 
 .delete-comment-btn:hover {
-  background: rgba(255, 107, 157, 0.1);
-  color: #ff6b9d;
+  background: rgba(255, 107, 157, 0.3);
+  border-color: #ff6b9d;
+  transform: scale(1.1);
+  box-shadow: 0 0 8px rgba(255, 107, 157, 0.4);
 }
 
 .comment-submit-btn {

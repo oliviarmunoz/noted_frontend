@@ -38,6 +38,7 @@ export function useEntities() {
           uri: musicEntity.uri,
           _id: musicEntity._id,
           externalId: musicEntity.externalId,
+          externalURL: musicEntity.externalURL,
         });
         
         return {
@@ -46,6 +47,7 @@ export function useEntities() {
           artist: musicEntity.artistName || "",
           uri: musicEntity.uri || "",
           imageUrl: musicEntity.imageUrl || null,
+          externalURL: musicEntity.externalURL || null,
         };
       }
 

@@ -472,6 +472,7 @@ export default {
               const songImageUrl = musicEntity?.imageUrl || null;
               const songAlbum =
                 musicEntity?.album || musicEntity?.albumName || null;
+              const songExternalURL = musicEntity?.externalURL || null;
 
               return {
                 ...reviewData,
@@ -486,6 +487,7 @@ export default {
                 text: reviewData.text || reviewData.notes || "",
                 rating: reviewData.rating || 0,
                 date: reviewData.date, // Preserve date for sorting
+                externalURL: songExternalURL,
               };
             } catch (err) {
               console.warn(

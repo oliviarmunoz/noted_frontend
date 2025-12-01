@@ -124,15 +124,14 @@ import { useRouter } from "vue-router";
 import { usePlaylists } from "../composables/usePlaylists.js";
 import { useToast } from "../composables/useToast.js";
 import { usePlaylistEvents } from "../composables/usePlaylistEvents.js";
-import { getUserId } from "../composables/useAuth.js";
+import { useAuth } from "../composables/useAuth.js";
 
 export default {
   name: "Playlists",
   setup() {
     const router = useRouter();
-    
-    const userId = getUserId();
-
+    const { currentUser } = useAuth();
+    const userId = ref(null);
     const favoritesItems = ref([]);
     const listenLaterItems = ref([]);
     const loadingFavorites = ref(false);
@@ -145,6 +144,14 @@ export default {
     const listenLaterLoadingMore = ref(false);
     const ITEMS_PER_PAGE = 20;
 
+    // Update userId when currentUser changes
+    watch(
+      () => currentUser.value,
+      (user) => {
+        userId.value = user?._id || user || null;
+      },
+      { immediate: true }
+    );
     // Use composables
     const { loadPlaylistItems, removeItemFromPlaylist } = usePlaylists();
     const { showToastNotification } = useToast();

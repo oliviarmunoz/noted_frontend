@@ -1216,6 +1216,7 @@
       "releaseDate": "string",
       "durationMs": "number",
       "artistName": "string"
+      "externalUrl": "string,
     }
   ]
 }
@@ -1295,6 +1296,7 @@
     "releaseDate": "string",
     "durationMs": "number",
     "artistName": "string"
+    "externalUrl": "string,
   }
 }
 ```
@@ -1340,6 +1342,7 @@
       "releaseDate": "string",
       "durationMs": "number",
       "artistName": "string"
+      "externalUrl": "string,
     }
   }
 ]
@@ -1386,6 +1389,7 @@
       "releaseDate": "string",
       "durationMs": "number",
       "artistName": "string"
+      "externalUrl": "string"
     }
   }
 ]
@@ -1432,6 +1436,7 @@
       "releaseDate": "string",
       "durationMs": "number",
       "artistName": "string"
+      "externalUrl": "string,
     }
   }
 ]

@@ -97,154 +97,166 @@
 
       <!-- Main Feed -->
       <main class="feed">
-        <div class="review-card" v-for="review in reviews" :key="review.id">
-          <div class="review-header">
-            <img
-              v-if="review.reviewerThumbnail"
-              :src="review.reviewerThumbnail"
-              :alt="review.reviewer"
-              class="user-avatar-small"
-            />
-            <div v-else class="user-icon">👤</div>
-            <div class="review-meta">
-              <span
-                class="reviewer-name clickable-username"
-                @click="navigateToUserProfile(review.reviewerId)"
-                v-if="review.reviewerId && review.reviewerId !== userId"
-              >
-                {{ review.reviewer }} reviewed
-              </span>
-              <span
-                class="reviewer-name"
-                v-else-if="review.reviewerId === userId"
-              >
-                You reviewed
-              </span>
-              <span class="reviewer-name" v-else
-                >{{ review.reviewer }} reviewed</span
-              >
-            </div>
-          </div>
-          <div
-            class="song-details"
-            @click="navigateFromFeed(review)"
-            style="cursor: pointer"
-          >
-            <img
-              v-if="review.imageUrl"
-              :src="review.imageUrl"
-              :alt="review.song"
-              class="song-thumbnail-feed"
-            />
-            <div v-else class="song-thumbnail-placeholder-feed">
-              {{ review.song?.charAt(0) || "?" }}
-            </div>
-            <div class="song-text">
-              <div class="song-title">{{ review.song }}</div>
-              <div class="song-artist">{{ review.artist }}</div>
-              <div v-if="review.album" class="song-album">
-                {{ review.album }}
+        <!-- Loading Screen -->
+        <div v-if="loading" class="loading-screen">
+          <div class="loading-spinner"></div>
+          <p class="loading-text-feed">Loading reviews...</p>
+        </div>
+        <!-- Error Message -->
+        <div v-else-if="error" class="error-message">
+          <p>{{ error }}</p>
+        </div>
+        <!-- Reviews Feed -->
+        <template v-else>
+          <div class="review-card" v-for="review in reviews" :key="review.id">
+            <div class="review-header">
+              <img
+                v-if="review.reviewerThumbnail"
+                :src="review.reviewerThumbnail"
+                :alt="review.reviewer"
+                class="user-avatar-small"
+              />
+              <div v-else class="user-icon">👤</div>
+              <div class="review-meta">
+                <span
+                  class="reviewer-name clickable-username"
+                  @click="navigateToUserProfile(review.reviewerId)"
+                  v-if="review.reviewerId && review.reviewerId !== userId"
+                >
+                  {{ review.reviewer }} reviewed
+                </span>
+                <span
+                  class="reviewer-name"
+                  v-else-if="review.reviewerId === userId"
+                >
+                  You reviewed
+                </span>
+                <span class="reviewer-name" v-else
+                  >{{ review.reviewer }} reviewed</span
+                >
               </div>
             </div>
-            <button
-              v-if="review.externalURL"
-              @click.stop="openInSpotify(review.externalURL)"
-              class="spotify-btn-small"
-              title="Open in Spotify"
-            >
-              <svg
-                class="spotify-icon-small"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.84-.179-.84-.66 0-.359.24-.66.54-.779 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.24 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.42 1.56-.299.421-1.02.599-1.559.3z"
-                />
-              </svg>
-              <span class="spotify-text-small">Open in Spotify</span>
-            </button>
-          </div>
-          <div class="rating">
-            <span
-              v-for="i in 5"
-              :key="i"
-              class="star"
-              :class="{ filled: i <= review.rating }"
-            >
-              ★
-            </span>
-          </div>
-          <p class="review-comment">{{ review.comment }}</p>
-          <div
-            class="comments-section"
-            v-if="review.comments && review.comments.length > 0"
-          >
             <div
-              class="comment-item"
-              v-for="comment in review.comments"
-              :key="comment.commentId"
+              class="song-details"
+              @click="navigateFromFeed(review)"
+              style="cursor: pointer"
             >
               <img
-                v-if="comment.commenterThumbnail"
-                :src="comment.commenterThumbnail"
-                :alt="comment.commenterUsername || comment.commenter"
-                class="comment-avatar-small"
+                v-if="review.imageUrl"
+                :src="review.imageUrl"
+                :alt="review.song"
+                class="song-thumbnail-feed"
               />
-              <span v-else class="comment-icon-small">👤</span>
-              <span
-                class="comment-user clickable-username"
-                @click="navigateToUserProfile(comment.commenter)"
-                v-if="comment.commenter"
-              >
-                {{ comment.commenterUsername || comment.commenter }}:
-              </span>
-              <span class="comment-user" v-else
-                >{{ comment.commenterUsername || comment.commenter }}:</span
-              >
-              <span class="comment-text">{{ comment.notes }}</span>
+              <div v-else class="song-thumbnail-placeholder-feed">
+                {{ review.song?.charAt(0) || "?" }}
+              </div>
+              <div class="song-text">
+                <div class="song-title">{{ review.song }}</div>
+                <div class="song-artist">{{ review.artist }}</div>
+                <div v-if="review.album" class="song-album">
+                  {{ review.album }}
+                </div>
+              </div>
               <button
-                v-if="comment.commenter === userId"
-                @click="handleDeleteComment(review.id, comment.commentId)"
-                class="delete-comment-btn"
-                title="Delete comment"
+                v-if="review.externalURL"
+                @click.stop="openInSpotify(review.externalURL)"
+                class="spotify-btn-small"
+                title="Open in Spotify"
               >
-                ×
+                <svg
+                  class="spotify-icon-small"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.84-.179-.84-.66 0-.359.24-.66.54-.779 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.24 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.42 1.56-.299.421-1.02.599-1.559.3z"
+                  />
+                </svg>
+                <span class="spotify-text-small">Open in Spotify</span>
+              </button>
+            </div>
+            <div class="rating">
+              <span
+                v-for="i in 5"
+                :key="i"
+                class="star"
+                :class="{ filled: i <= review.rating }"
+              >
+                ★
+              </span>
+            </div>
+            <p class="review-comment">{{ review.comment }}</p>
+            <div
+              class="comments-section"
+              v-if="review.comments && review.comments.length > 0"
+            >
+              <div
+                class="comment-item"
+                v-for="comment in review.comments"
+                :key="comment.commentId"
+              >
+                <img
+                  v-if="comment.commenterThumbnail"
+                  :src="comment.commenterThumbnail"
+                  :alt="comment.commenterUsername || comment.commenter"
+                  class="comment-avatar-small"
+                />
+                <span v-else class="comment-icon-small">👤</span>
+                <span
+                  class="comment-user clickable-username"
+                  @click="navigateToUserProfile(comment.commenter)"
+                  v-if="comment.commenter"
+                >
+                  {{ comment.commenterUsername || comment.commenter }}:
+                </span>
+                <span class="comment-user" v-else
+                  >{{ comment.commenterUsername || comment.commenter }}:</span
+                >
+                <span class="comment-text">{{ comment.notes }}</span>
+                <button
+                  v-if="comment.commenter === userId"
+                  @click="handleDeleteComment(review.id, comment.commentId)"
+                  class="delete-comment-btn"
+                  title="Delete comment"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+            <div class="comment-input" v-if="review && review.id">
+              <img
+                v-if="currentUserThumbnail"
+                :src="currentUserThumbnail"
+                :alt="'Your profile'"
+                class="comment-icon-avatar"
+              />
+              <span v-else class="comment-icon">👤</span>
+              <input
+                type="text"
+                placeholder="Leave a comment"
+                class="comment-field"
+                v-model="commentInputs[review.id]"
+                @keyup.enter="handleAddComment(review.id)"
+              />
+              <button
+                @click="handleAddComment(review.id)"
+                class="comment-submit-btn"
+              >
+                Post
               </button>
             </div>
           </div>
-          <div class="comment-input" v-if="review && review.id">
-            <img
-              v-if="currentUserThumbnail"
-              :src="currentUserThumbnail"
-              :alt="'Your profile'"
-              class="comment-icon-avatar"
-            />
-            <span v-else class="comment-icon">👤</span>
-            <input
-              type="text"
-              placeholder="Leave a comment"
-              class="comment-field"
-              v-model="commentInputs[review.id]"
-              @keyup.enter="handleAddComment(review.id)"
-            />
+          <div v-if="reviewsHasMore" class="load-more-feed">
             <button
-              @click="handleAddComment(review.id)"
-              class="comment-submit-btn"
+              @click="loadMoreReviews"
+              class="load-more-btn"
+              :disabled="loadingMoreReviews"
             >
-              Post
+              {{ loadingMoreReviews ? "Loading..." : "Load More Reviews" }}
             </button>
           </div>
-        </div>
-        <div v-if="reviewsHasMore" class="load-more-feed">
-          <button
-            @click="loadMoreReviews"
-            class="load-more-btn"
-            :disabled="loadingMoreReviews"
-          >
-            {{ loadingMoreReviews ? "Loading..." : "Load More Reviews" }}
-          </button>
-        </div>
+        </template>
       </main>
     </div>
   </div>
@@ -1717,6 +1729,48 @@ export default {
 
 .error {
   color: #ff6b9d;
+}
+
+.loading-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  min-height: 400px;
+}
+
+.loading-spinner {
+  width: 50px;
+  height: 50px;
+  border: 4px solid rgba(74, 158, 255, 0.2);
+  border-top-color: #4a9eff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 1.5rem;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-text-feed {
+  color: #7b8ca8;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.error-message {
+  text-align: center;
+  padding: 3rem;
+  color: #ff6b9d;
+  font-size: 1rem;
+  background: rgba(26, 35, 52, 0.6);
+  border: 1px solid rgba(123, 140, 168, 0.2);
+  border-radius: 8px;
+  backdrop-filter: blur(10px);
 }
 
 .load-more-feed {

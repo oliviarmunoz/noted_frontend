@@ -36,7 +36,6 @@
           <div class="bio-section">
             <div v-if="!isEditingBio && !isOwnProfile" class="bio-display">
               <p v-if="bio" class="bio-text">{{ bio }}</p>
-              <p v-else class="bio-text bio-empty">No bio yet</p>
             </div>
             <div v-else-if="!isEditingBio && isOwnProfile" class="bio-display">
               <p v-if="bio" class="bio-text">{{ bio }}</p>

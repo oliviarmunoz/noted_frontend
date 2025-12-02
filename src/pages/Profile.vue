@@ -32,6 +32,54 @@
         </div>
         <div class="user-info">
           <h1 class="username">{{ username || "Loading..." }}</h1>
+          <!-- Bio Section -->
+          <div class="bio-section">
+            <div v-if="!isEditingBio && !isOwnProfile" class="bio-display">
+              <p v-if="bio" class="bio-text">{{ bio }}</p>
+              <p v-else class="bio-text bio-empty">No bio yet</p>
+            </div>
+            <div v-else-if="!isEditingBio && isOwnProfile" class="bio-display">
+              <p v-if="bio" class="bio-text">{{ bio }}</p>
+              <p v-else class="bio-text bio-empty">
+                No bio yet. Click edit to add one!
+              </p>
+              <button
+                class="edit-bio-btn"
+                @click="startEditingBio"
+                title="Edit bio"
+              >
+                {{ bio ? "Edit" : "Add Bio" }}
+              </button>
+            </div>
+            <div v-else-if="isEditingBio && isOwnProfile" class="bio-edit">
+              <textarea
+                v-model="bioEditText"
+                class="bio-textarea"
+                placeholder="Tell us about yourself..."
+                rows="3"
+                maxlength="500"
+              ></textarea>
+              <div class="bio-edit-actions">
+                <span class="bio-char-count">{{ bioEditText.length }}/500</span>
+                <div class="bio-buttons">
+                  <button
+                    class="save-bio-btn"
+                    @click="saveBio"
+                    :disabled="savingBio"
+                  >
+                    {{ savingBio ? "Saving..." : "Save" }}
+                  </button>
+                  <button
+                    class="cancel-bio-btn"
+                    @click="cancelEditingBio"
+                    :disabled="savingBio"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
           <div class="user-stats">
             <div class="stat-item">
               <span class="stat-value">{{ reviews.length }}</span>
@@ -567,6 +615,12 @@ export default {
     const uploadingThumbnail = ref(false);
     const fileInput = ref(null);
 
+    // Bio state
+    const bio = ref("");
+    const isEditingBio = ref(false);
+    const bioEditText = ref("");
+    const savingBio = ref(false);
+
     // Friend search and add modal
     const showAddFriendModal = ref(false);
     const friendSearchQuery = ref("");
@@ -594,6 +648,62 @@ export default {
       } catch (error) {
         console.error("[Profile] Error loading thumbnail:", error);
         thumbnailUrl.value = null;
+      }
+    };
+
+    // Load bio
+    const loadBio = async () => {
+      if (!userId.value) {
+        bio.value = "";
+        return;
+      }
+      try {
+        const result = await userProfile.getBio(userId.value);
+        const bioData =
+          Array.isArray(result) && result.length > 0 ? result[0] : result;
+        bio.value = bioData?.bio || "";
+      } catch (error) {
+        console.error("[Profile] Error loading bio:", error);
+        bio.value = "";
+      }
+    };
+
+    // Start editing bio
+    const startEditingBio = () => {
+      bioEditText.value = bio.value;
+      isEditingBio.value = true;
+    };
+
+    // Cancel editing bio
+    const cancelEditingBio = () => {
+      bioEditText.value = "";
+      isEditingBio.value = false;
+    };
+
+    // Save bio
+    const saveBio = async () => {
+      if (savingBio.value) return;
+
+      savingBio.value = true;
+      try {
+        const result = await userProfile.updateBio(
+          userId.value,
+          bioEditText.value.trim()
+        );
+
+        if (result && result.error) {
+          showToastNotification(result.error || "Failed to update bio");
+          return;
+        }
+
+        bio.value = bioEditText.value.trim();
+        isEditingBio.value = false;
+        showToastNotification("Bio updated successfully!");
+      } catch (error) {
+        console.error("[Profile] Error saving bio:", error);
+        showToastNotification(error.message || "Failed to save bio");
+      } finally {
+        savingBio.value = false;
       }
     };
 
@@ -1603,6 +1713,7 @@ export default {
         await Promise.all([
           loadUsername(),
           loadThumbnail(),
+          loadBio(),
           loadReviews(),
           loadPlaylistCounts(),
           loadPlaylistItems(),
@@ -1691,6 +1802,13 @@ export default {
       fileInput,
       handleFileSelect,
       triggerFileInput,
+      bio,
+      isEditingBio,
+      bioEditText,
+      savingBio,
+      startEditingBio,
+      cancelEditingBio,
+      saveBio,
     };
   },
 };
@@ -1786,6 +1904,132 @@ export default {
   font-weight: 700;
   color: #ffffff;
   margin-bottom: 1rem;
+}
+
+/* Bio Section */
+.bio-section {
+  margin-bottom: 1rem;
+}
+
+.bio-display {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.bio-text {
+  color: #7b8ca8;
+  line-height: 1.6;
+  margin: 0;
+  flex: 1;
+}
+
+.bio-text.bio-empty {
+  font-style: italic;
+  opacity: 0.7;
+}
+
+.edit-bio-btn {
+  padding: 0.5rem 1rem;
+  background: rgba(74, 158, 255, 0.2);
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  border-radius: 4px;
+  color: #4a9eff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.edit-bio-btn:hover {
+  background: rgba(74, 158, 255, 0.3);
+  border-color: rgba(74, 158, 255, 0.5);
+}
+
+.bio-edit {
+  width: 100%;
+}
+
+.bio-textarea {
+  width: 100%;
+  padding: 0.75rem;
+  background: rgba(10, 14, 26, 0.6);
+  border: 1px solid rgba(123, 140, 168, 0.2);
+  border-radius: 4px;
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  resize: vertical;
+  min-height: 80px;
+  margin-bottom: 0.5rem;
+}
+
+.bio-textarea:focus {
+  outline: none;
+  border-color: #4a9eff;
+}
+
+.bio-textarea::placeholder {
+  color: #4a5568;
+}
+
+.bio-edit-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.bio-char-count {
+  font-size: 0.85rem;
+  color: #7b8ca8;
+}
+
+.bio-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.save-bio-btn,
+.cancel-bio-btn {
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.save-bio-btn {
+  background: rgba(74, 158, 255, 0.2);
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  color: #4a9eff;
+}
+
+.save-bio-btn:hover:not(:disabled) {
+  background: rgba(74, 158, 255, 0.3);
+  border-color: rgba(74, 158, 255, 0.5);
+}
+
+.cancel-bio-btn {
+  background: rgba(123, 140, 168, 0.2);
+  border: 1px solid rgba(123, 140, 168, 0.3);
+  color: #7b8ca8;
+}
+
+.cancel-bio-btn:hover:not(:disabled) {
+  background: rgba(123, 140, 168, 0.3);
+  border-color: rgba(123, 140, 168, 0.5);
+}
+
+.save-bio-btn:disabled,
+.cancel-bio-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .user-stats {

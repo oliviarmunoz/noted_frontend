@@ -98,6 +98,9 @@
           <p class="song-artist">
             {{ songInfo.artist || "Unknown Artist" }}
           </p>
+          <p v-if="songInfo.album" class="song-album">
+            {{ songInfo.album }}
+          </p>
 
           <div class="rating-section">
             <div class="rating-group">
@@ -144,16 +147,6 @@
                 }}</span>
               </button>
             </div>
-          </div>
-
-          <div class="song-meta">
-            <p v-if="songInfo.album">
-              <span class="meta-label">Album:</span> {{ songInfo.album }}
-            </p>
-            <p v-if="songInfo.releaseDate">
-              <span class="meta-label">Release Date:</span>
-              {{ formatReleaseDate(songInfo.releaseDate) }}
-            </p>
           </div>
 
           <div class="notes-section">
@@ -1269,6 +1262,13 @@ export default {
   font-size: 1.5rem;
   color: #7b8ca8;
   margin: 0;
+}
+
+.song-album {
+  font-size: 1.2rem;
+  color: #7b8ca8;
+  margin: 0.5rem 0 0 0;
+  opacity: 0.8;
 }
 
 .loading {

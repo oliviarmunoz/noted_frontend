@@ -27,7 +27,7 @@
             :disabled="uploadingThumbnail"
             title="Upload profile picture"
           >
-            {{ uploadingThumbnail ? "..." : "📷" }}
+            {{ uploadingThumbnail ? "..." : "+" }}
           </button>
         </div>
         <div class="user-info">
@@ -107,7 +107,13 @@
                 <div v-if="searchedUser" class="searched-user">
                   <div class="searched-user-info">
                     <div class="friend-avatar">
-                      <span class="friend-icon">👤</span>
+                      <img
+                        v-if="searchedUser.thumbnail"
+                        :src="searchedUser.thumbnail"
+                        :alt="searchedUser.username"
+                        class="friend-avatar-image"
+                      />
+                      <span v-else class="friend-icon">👤</span>
                     </div>
                     <div class="friend-info">
                       <div class="friend-name">{{ searchedUser.username }}</div>
@@ -159,7 +165,13 @@
                   class="friend-item"
                 >
                   <div class="friend-avatar">
-                    <span class="friend-icon">👤</span>
+                    <img
+                      v-if="friend.friendThumbnail"
+                      :src="friend.friendThumbnail"
+                      :alt="friend.friendName || friend.friend"
+                      class="friend-avatar-image"
+                    />
+                    <span v-else class="friend-icon">👤</span>
                   </div>
                   <div class="friend-info">
                     <div
@@ -211,7 +223,13 @@
                       class="friend-item friend-request-item"
                     >
                       <div class="friend-avatar">
-                        <span class="friend-icon">👤</span>
+                        <img
+                          v-if="request.requesterThumbnail"
+                          :src="request.requesterThumbnail"
+                          :alt="request.requesterName || request.requester"
+                          class="friend-avatar-image"
+                        />
+                        <span v-else class="friend-icon">👤</span>
                       </div>
                       <div class="friend-info">
                         <div
@@ -256,7 +274,13 @@
                       class="friend-item friend-request-item"
                     >
                       <div class="friend-avatar">
-                        <span class="friend-icon">👤</span>
+                        <img
+                          v-if="request.targetThumbnail"
+                          :src="request.targetThumbnail"
+                          :alt="request.targetName || request.target"
+                          class="friend-avatar-image"
+                        />
+                        <span v-else class="friend-icon">👤</span>
                       </div>
                       <div class="friend-info">
                         <div
@@ -1054,11 +1078,16 @@ export default {
           return;
         }
 
-        // Load usernames for each friend
+        // Load usernames and thumbnails for each friend
         const friendsWithNames = await Promise.all(
           (result || []).map(async (friendItem) => {
             try {
-              const usernameResult = await auth.getUsername(friendItem.friend);
+              // Load username and thumbnail in parallel
+              const [usernameResult, thumbnailResult] = await Promise.all([
+                auth.getUsername(friendItem.friend),
+                userProfile.getThumbnail(friendItem.friend),
+              ]);
+
               // API returns an array: [{ "username": "String" }]
               const usernameData =
                 Array.isArray(usernameResult) && usernameResult.length > 0
@@ -1068,18 +1097,28 @@ export default {
                 usernameData && !usernameData.error && usernameData.username
                   ? usernameData.username
                   : friendItem.friend;
+
+              // Extract thumbnail URL
+              const thumbnailData =
+                Array.isArray(thumbnailResult) && thumbnailResult.length > 0
+                  ? thumbnailResult[0]
+                  : thumbnailResult;
+              const thumbnailUrl = thumbnailData?.thumbnailUrl || null;
+
               return {
                 ...friendItem,
                 friendName: username,
+                friendThumbnail: thumbnailUrl,
               };
             } catch (error) {
               console.error(
-                `[Profile] Error loading username for friend ${friendItem.friend}:`,
+                `[Profile] Error loading username/thumbnail for friend ${friendItem.friend}:`,
                 error
               );
               return {
                 ...friendItem,
                 friendName: friendItem.friend,
+                friendThumbnail: null,
               };
             }
           })
@@ -1108,9 +1147,12 @@ export default {
           const incomingWithNames = await Promise.all(
             (incomingResult || []).map(async (request) => {
               try {
-                const usernameResult = await auth.getUsername(
-                  request.requester
-                );
+                // Load username and thumbnail in parallel
+                const [usernameResult, thumbnailResult] = await Promise.all([
+                  auth.getUsername(request.requester),
+                  userProfile.getThumbnail(request.requester),
+                ]);
+
                 // API returns an array: [{ "username": "String" }]
                 const usernameData =
                   Array.isArray(usernameResult) && usernameResult.length > 0
@@ -1120,18 +1162,28 @@ export default {
                   usernameData && !usernameData.error && usernameData.username
                     ? usernameData.username
                     : request.requester;
+
+                // Extract thumbnail URL
+                const thumbnailData =
+                  Array.isArray(thumbnailResult) && thumbnailResult.length > 0
+                    ? thumbnailResult[0]
+                    : thumbnailResult;
+                const thumbnailUrl = thumbnailData?.thumbnailUrl || null;
+
                 return {
                   ...request,
                   requesterName: username,
+                  requesterThumbnail: thumbnailUrl,
                 };
               } catch (error) {
                 console.error(
-                  `[Profile] Error loading username for requester ${request.requester}:`,
+                  `[Profile] Error loading username/thumbnail for requester ${request.requester}:`,
                   error
                 );
                 return {
                   ...request,
                   requesterName: request.requester,
+                  requesterThumbnail: null,
                 };
               }
             })
@@ -1149,7 +1201,12 @@ export default {
           const outgoingWithNames = await Promise.all(
             (outgoingResult || []).map(async (request) => {
               try {
-                const usernameResult = await auth.getUsername(request.target);
+                // Load username and thumbnail in parallel
+                const [usernameResult, thumbnailResult] = await Promise.all([
+                  auth.getUsername(request.target),
+                  userProfile.getThumbnail(request.target),
+                ]);
+
                 // API returns an array: [{ "username": "String" }]
                 const usernameData =
                   Array.isArray(usernameResult) && usernameResult.length > 0
@@ -1159,18 +1216,28 @@ export default {
                   usernameData && !usernameData.error && usernameData.username
                     ? usernameData.username
                     : request.target;
+
+                // Extract thumbnail URL
+                const thumbnailData =
+                  Array.isArray(thumbnailResult) && thumbnailResult.length > 0
+                    ? thumbnailResult[0]
+                    : thumbnailResult;
+                const thumbnailUrl = thumbnailData?.thumbnailUrl || null;
+
                 return {
                   ...request,
                   targetName: username,
+                  targetThumbnail: thumbnailUrl,
                 };
               } catch (error) {
                 console.error(
-                  `[Profile] Error loading username for target ${request.target}:`,
+                  `[Profile] Error loading username/thumbnail for target ${request.target}:`,
                   error
                 );
                 return {
                   ...request,
                   targetName: request.target,
+                  targetThumbnail: null,
                 };
               }
             })
@@ -1256,10 +1323,27 @@ export default {
             return;
           }
 
-          console.log("[Profile] User is valid, setting searchedUser");
+          console.log("[Profile] User is valid, loading thumbnail");
+          // Load thumbnail for searched user
+          let thumbnailUrl = null;
+          try {
+            const thumbnailResult = await userProfile.getThumbnail(foundUserId);
+            const thumbnailData =
+              Array.isArray(thumbnailResult) && thumbnailResult.length > 0
+                ? thumbnailResult[0]
+                : thumbnailResult;
+            thumbnailUrl = thumbnailData?.thumbnailUrl || null;
+          } catch (thumbError) {
+            console.warn(
+              "[Profile] Error loading thumbnail for searched user:",
+              thumbError
+            );
+          }
+
           searchedUser.value = {
             user: foundUserId,
             username: searchQuery,
+            thumbnail: thumbnailUrl,
           };
         } else {
           console.log(
@@ -1647,7 +1731,8 @@ export default {
   align-items: center;
   justify-content: center;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
+  z-index: 1;
 }
 
 .avatar-image {
@@ -1663,21 +1748,23 @@ export default {
 
 .upload-avatar-btn {
   position: absolute;
-  bottom: 4px;
-  right: 4px;
-  width: 32px;
-  height: 32px;
+  bottom: -4px;
+  right: -4px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   background: rgba(74, 158, 255, 0.9);
   border: 2px solid rgba(255, 255, 255, 0.8);
   color: #ffffff;
-  font-size: 1rem;
+  font-size: 1.2rem;
+  font-weight: 600;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  z-index: 100;
 }
 
 .upload-avatar-btn:hover:not(:disabled) {
@@ -2115,6 +2202,15 @@ export default {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.friend-avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
 }
 
 .friend-icon {

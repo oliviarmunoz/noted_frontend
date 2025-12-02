@@ -531,7 +531,6 @@ export default {
             if (reviewUserId) {
               try {
                 const usernameResponse = await auth.getUsername(reviewUserId);
-                // _getUsername returns an array: [{ username: "String" }]
                 if (usernameResponse && !usernameResponse.error) {
                   if (
                     Array.isArray(usernameResponse) &&

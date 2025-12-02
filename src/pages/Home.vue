@@ -99,7 +99,13 @@
       <main class="feed">
         <div class="review-card" v-for="review in reviews" :key="review.id">
           <div class="review-header">
-            <div class="user-icon">👤</div>
+            <img
+              v-if="review.reviewerThumbnail"
+              :src="review.reviewerThumbnail"
+              :alt="review.reviewer"
+              class="user-avatar-small"
+            />
+            <div v-else class="user-icon">👤</div>
             <div class="review-meta">
               <span
                 class="reviewer-name clickable-username"
@@ -179,6 +185,13 @@
               v-for="comment in review.comments"
               :key="comment.commentId"
             >
+              <img
+                v-if="comment.commenterThumbnail"
+                :src="comment.commenterThumbnail"
+                :alt="comment.commenterUsername || comment.commenter"
+                class="comment-avatar-small"
+              />
+              <span v-else class="comment-icon-small">👤</span>
               <span
                 class="comment-user clickable-username"
                 @click="navigateToUserProfile(comment.commenter)"
@@ -201,7 +214,13 @@
             </div>
           </div>
           <div class="comment-input" v-if="review && review.id">
-            <span class="comment-icon">👤</span>
+            <img
+              v-if="currentUserThumbnail"
+              :src="currentUserThumbnail"
+              :alt="'Your profile'"
+              class="comment-icon-avatar"
+            />
+            <span v-else class="comment-icon">👤</span>
             <input
               type="text"
               placeholder="Leave a comment"
@@ -238,7 +257,13 @@ import { usePlaylists } from "../composables/usePlaylists.js";
 import { useToast } from "../composables/useToast.js";
 import { usePlaylistEvents } from "../composables/usePlaylistEvents.js";
 import { useAuth } from "../composables/useAuth.js";
-import { friending, review, musicDiscovery, auth } from "../api/api.js";
+import {
+  friending,
+  review,
+  musicDiscovery,
+  auth,
+  userProfile,
+} from "../api/api.js";
 
 export default {
   name: "Home",
@@ -270,6 +295,35 @@ export default {
     const { loadPlaylistItems, removeItemFromPlaylist } = usePlaylists();
     const { showToastNotification } = useToast();
     const { playlistUpdateEvent } = usePlaylistEvents();
+
+    // Current user thumbnail
+    const currentUserThumbnail = ref(null);
+    const loadCurrentUserThumbnail = async () => {
+      if (!userId.value) {
+        currentUserThumbnail.value = null;
+        return;
+      }
+      try {
+        const result = await userProfile.getThumbnail(userId.value);
+        const thumbnailData =
+          Array.isArray(result) && result.length > 0 ? result[0] : result;
+        currentUserThumbnail.value = thumbnailData?.thumbnailUrl || null;
+      } catch (error) {
+        console.warn("[Home] Error loading current user thumbnail:", error);
+        currentUserThumbnail.value = null;
+      }
+    };
+
+    // Load thumbnail when userId changes
+    watch(
+      () => userId.value,
+      () => {
+        if (userId.value) {
+          loadCurrentUserThumbnail();
+        }
+      },
+      { immediate: true }
+    );
 
     // Load favorites with enhanced entity information
     const loadFavorites = async () => {
@@ -718,6 +772,7 @@ export default {
       userId: computed(() => userId.value),
       showToastNotification,
       navigateToUserProfile,
+      currentUserThumbnail,
     };
   },
   data() {
@@ -736,7 +791,24 @@ export default {
     await this.loadFeed();
   },
   methods: {
-    // Helper method to enhance comments with usernames
+    // Helper method to load thumbnail for a user
+    async loadUserThumbnail(userId) {
+      if (!userId) return null;
+      try {
+        const result = await userProfile.getThumbnail(userId);
+        const thumbnailData =
+          Array.isArray(result) && result.length > 0 ? result[0] : result;
+        return thumbnailData?.thumbnailUrl || null;
+      } catch (error) {
+        console.warn(
+          `[Home] Error loading thumbnail for user ${userId}:`,
+          error
+        );
+        return null;
+      }
+    },
+
+    // Helper method to enhance comments with usernames and thumbnails
     async enhanceCommentsWithUsernames(comments) {
       if (!comments || !Array.isArray(comments)) {
         return [];
@@ -745,11 +817,16 @@ export default {
       return await Promise.all(
         comments.map(async (comment) => {
           let commenterUsername = comment.commenter;
+          let commenterThumbnail = null;
+
           if (comment.commenter) {
             try {
-              const usernameResponse = await auth.getUsername(
-                comment.commenter
-              );
+              // Load username and thumbnail in parallel
+              const [usernameResponse, thumbnail] = await Promise.all([
+                auth.getUsername(comment.commenter),
+                this.loadUserThumbnail(comment.commenter),
+              ]);
+
               // _getUsername returns an array: [{ username: "String" }]
               if (usernameResponse && !usernameResponse.error) {
                 if (
@@ -762,9 +839,11 @@ export default {
                   commenterUsername = usernameResponse.username;
                 }
               }
+
+              commenterThumbnail = thumbnail;
             } catch (err) {
               console.warn(
-                `Could not get username for commenter ${comment.commenter}:`,
+                `Could not get username/thumbnail for commenter ${comment.commenter}:`,
                 err
               );
               // Keep the commenter ID as fallback
@@ -774,6 +853,7 @@ export default {
           return {
             ...comment,
             commenterUsername: commenterUsername,
+            commenterThumbnail: commenterThumbnail,
           };
         })
       );
@@ -875,10 +955,16 @@ export default {
                   }
                 }
 
-                // Get reviewer username using _getUsername API
+                // Get reviewer username and thumbnail using APIs
                 let reviewerName = userId;
+                let reviewerThumbnail = null;
                 try {
-                  const usernameResponse = await auth.getUsername(userId);
+                  // Load username and thumbnail in parallel
+                  const [usernameResponse, thumbnail] = await Promise.all([
+                    auth.getUsername(userId),
+                    this.loadUserThumbnail(userId),
+                  ]);
+
                   // _getUsername returns an array: [{ username: "String" }]
                   if (usernameResponse && !usernameResponse.error) {
                     if (
@@ -890,8 +976,13 @@ export default {
                       reviewerName = usernameResponse.username;
                     }
                   }
+
+                  reviewerThumbnail = thumbnail;
                 } catch (e) {
-                  console.warn(`Could not get username for user ${userId}:`, e);
+                  console.warn(
+                    `Could not get username/thumbnail for user ${userId}:`,
+                    e
+                  );
                 }
 
                 // Extract URI and other info from musicEntity
@@ -947,6 +1038,7 @@ export default {
                   id: reviewId,
                   reviewer: reviewerName,
                   reviewerId: userId, // Store userId for navigation
+                  reviewerThumbnail: reviewerThumbnail, // Store thumbnail URL
                   song: songName,
                   artist: songArtist,
                   album: songAlbum,
@@ -1334,6 +1426,16 @@ export default {
   align-items: center;
   justify-content: center;
   font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.user-avatar-small {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  flex-shrink: 0;
 }
 
 .reviewer-name {
@@ -1481,6 +1583,40 @@ export default {
 .comment-icon {
   color: #7b8ca8;
   font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.comment-icon-avatar {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  flex-shrink: 0;
+}
+
+.comment-icon-small {
+  width: 1.2rem;
+  height: 1.2rem;
+  border-radius: 50%;
+  background: rgba(74, 158, 255, 0.2);
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  flex-shrink: 0;
+  margin-right: 0.5rem;
+}
+
+.comment-avatar-small {
+  width: 1.2rem;
+  height: 1.2rem;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  flex-shrink: 0;
+  margin-right: 0.5rem;
 }
 
 .comment-field {
@@ -1511,7 +1647,7 @@ export default {
 
 .comment-item {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 0.5rem;
   margin-bottom: 0.75rem;
   padding: 0.75rem;

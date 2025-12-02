@@ -4,7 +4,31 @@
       <!-- User Header -->
       <div class="profile-header">
         <div class="user-avatar">
-          <span class="avatar-icon">👤</span>
+          <img
+            v-if="thumbnailUrl"
+            :src="thumbnailUrl"
+            alt="Profile picture"
+            class="avatar-image"
+          />
+          <span v-else class="avatar-icon">👤</span>
+          <!-- Upload button (only for own profile) -->
+          <input
+            v-if="isOwnProfile"
+            ref="fileInput"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            @change="handleFileSelect"
+            style="display: none"
+          />
+          <button
+            v-if="isOwnProfile"
+            class="upload-avatar-btn"
+            @click="triggerFileInput"
+            :disabled="uploadingThumbnail"
+            title="Upload profile picture"
+          >
+            {{ uploadingThumbnail ? "..." : "📷" }}
+          </button>
         </div>
         <div class="user-info">
           <h1 class="username">{{ username || "Loading..." }}</h1>
@@ -31,11 +55,12 @@
 
       <!-- Content Sections -->
       <div class="profile-content">
-        <!-- Friends Section (only for own profile) -->
-        <section v-if="isOwnProfile" class="profile-section">
+        <!-- Friends Section -->
+        <section class="profile-section">
           <div class="friends-header">
             <h2 class="section-title">FRIENDS</h2>
             <button
+              v-if="isOwnProfile"
               class="add-friend-btn"
               @click="showAddFriendModal = true"
               title="Add friend"
@@ -44,9 +69,9 @@
             </button>
           </div>
 
-          <!-- Add Friend Modal -->
+          <!-- Add Friend Modal (only for own profile) -->
           <div
-            v-if="showAddFriendModal"
+            v-if="isOwnProfile && showAddFriendModal"
             class="modal-overlay"
             @click="showAddFriendModal = false"
           >
@@ -102,7 +127,10 @@
 
           <div class="friends-grid">
             <!-- Left Column: Current Friends -->
-            <div class="friends-column">
+            <div
+              class="friends-column"
+              :class="{ 'full-width': !isOwnProfile }"
+            >
               <h3 class="subsection-title">Friends</h3>
               <div v-if="loadingFriends" class="loading-text">
                 Loading friends...
@@ -113,6 +141,7 @@
               <div
                 v-else-if="
                   friends.length === 0 &&
+                  isOwnProfile &&
                   incomingRequests.length === 0 &&
                   outgoingRequests.length === 0
                 "
@@ -140,7 +169,7 @@
                       {{ friend.friendName || friend.friend }}
                     </div>
                   </div>
-                  <div class="friend-actions">
+                  <div v-if="isOwnProfile" class="friend-actions">
                     <button
                       class="remove-friend-btn"
                       @click="handleRemoveFriend(friend)"
@@ -154,8 +183,8 @@
               </div>
             </div>
 
-            <!-- Right Column: Friend Requests -->
-            <div class="friends-column">
+            <!-- Right Column: Friend Requests (only for own profile) -->
+            <div v-if="isOwnProfile" class="friends-column">
               <h3 class="subsection-title">Friend Requests</h3>
               <div v-if="loadingRequests" class="loading-text">
                 Loading requests...
@@ -394,6 +423,7 @@ import {
   auth,
   musicDiscovery,
   playlist,
+  userProfile,
 } from "../api/api.js";
 import { usePlaylists } from "../composables/usePlaylists.js";
 import { useToast } from "../composables/useToast.js";
@@ -508,6 +538,11 @@ export default {
     const reviewsError = ref(null);
     const friendsError = ref(null);
 
+    // Profile picture state
+    const thumbnailUrl = ref(null);
+    const uploadingThumbnail = ref(false);
+    const fileInput = ref(null);
+
     // Friend search and add modal
     const showAddFriendModal = ref(false);
     const friendSearchQuery = ref("");
@@ -519,6 +554,85 @@ export default {
 
     const { getPlaylistCount } = usePlaylists();
     const { showToastNotification } = useToast();
+
+    // Load profile thumbnail
+    const loadThumbnail = async () => {
+      if (!userId.value) {
+        thumbnailUrl.value = null;
+        return;
+      }
+      try {
+        const result = await userProfile.getThumbnail(userId.value);
+        const thumbnailData =
+          Array.isArray(result) && result.length > 0 ? result[0] : result;
+        thumbnailUrl.value =
+          thumbnailData?.thumbnailUrl || thumbnailData?.thumbnail || null;
+      } catch (error) {
+        console.error("[Profile] Error loading thumbnail:", error);
+        thumbnailUrl.value = null;
+      }
+    };
+
+    // Trigger file input click
+    const triggerFileInput = () => {
+      fileInput.value?.click();
+    };
+
+    // Handle file selection and upload
+    const handleFileSelect = async (event) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      // Validate file
+      if (!file.type.startsWith("image/")) {
+        showToastNotification("Please select an image file");
+        return;
+      }
+
+      if (file.size > 5 * 1024 * 1024) {
+        // 5MB limit
+        showToastNotification("Image must be less than 5MB");
+        return;
+      }
+
+      uploadingThumbnail.value = true;
+      try {
+        // Convert file to data URL first so we can use it immediately
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+
+        // Send to backend (backend expects { user, thumbnailUrl: string })
+        const result = await userProfile.updateThumbnail(userId.value, dataUrl);
+        console.log("[Profile] updateThumbnail response:", result);
+
+        // Backend returns {} on success, so use the data URL we created
+        if (!result || !result.error) {
+          thumbnailUrl.value = dataUrl;
+          showToastNotification("Profile picture updated!");
+        } else {
+          throw new Error(result.error || "Failed to update thumbnail");
+        }
+      } catch (error) {
+        console.error("[Profile] Error uploading picture:", error);
+        console.error("[Profile] Error details:", {
+          message: error.message,
+          stack: error.stack,
+        });
+        showToastNotification(
+          error.message || "Failed to upload picture. Please try again."
+        );
+      } finally {
+        uploadingThumbnail.value = false;
+        // Reset file input
+        if (fileInput.value) {
+          fileInput.value.value = "";
+        }
+      }
+    };
 
     // Load username
     const loadUsername = async () => {
@@ -1404,15 +1518,16 @@ export default {
         }
         await Promise.all([
           loadUsername(),
+          loadThumbnail(),
           loadReviews(),
           loadPlaylistCounts(),
           loadPlaylistItems(),
+          loadFriends(), // Load friends for all profiles
         ]);
-        // Only load friends/requests for own profile
+        // Only load friend requests for own profile
         if (isOwnProfile.value) {
-          await Promise.all([loadFriends(), loadFriendRequests()]);
+          await loadFriendRequests();
         } else {
-          friends.value = [];
           incomingRequests.value = [];
           outgoingRequests.value = [];
         }
@@ -1487,6 +1602,11 @@ export default {
       handleDeclineRequest,
       handleCancelRequest,
       handleRemoveFriend,
+      thumbnailUrl,
+      uploadingThumbnail,
+      fileInput,
+      handleFileSelect,
+      triggerFileInput,
     };
   },
 };
@@ -1526,10 +1646,48 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
 }
 
 .avatar-icon {
   font-size: 3rem;
+}
+
+.upload-avatar-btn {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(74, 158, 255, 0.9);
+  border: 2px solid rgba(255, 255, 255, 0.8);
+  color: #ffffff;
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.upload-avatar-btn:hover:not(:disabled) {
+  background: rgba(74, 158, 255, 1);
+  transform: scale(1.1);
+}
+
+.upload-avatar-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .user-info {
@@ -1830,6 +1988,10 @@ export default {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 2rem;
+}
+
+.friends-column.full-width {
+  grid-column: 1 / -1;
 }
 
 .friends-column {

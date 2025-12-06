@@ -43,7 +43,7 @@
               </button>
             </li>
             <li v-if="listenLaterItems.length === 0" class="empty-message">
-              No songs in Listen Later
+              Search songs to add to Listen Later
             </li>
           </ul>
         </div>
@@ -89,7 +89,7 @@
               </button>
             </li>
             <li v-if="favoritesItems.length === 0" class="empty-message">
-              No favorites yet
+              Search songs to add to Favorites
             </li>
           </ul>
         </div>
@@ -1412,6 +1412,7 @@ export default {
   font-size: 0.85rem;
   font-style: italic;
   list-style: none;
+  white-space: nowrap;
 }
 
 /* Feed */

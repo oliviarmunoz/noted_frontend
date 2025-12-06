@@ -16,7 +16,7 @@
         <div class="nav-search" ref="searchContainer">
           <input
             type="text"
-            placeholder="Search song, album, people"
+            placeholder="Search song to review"
             class="search-input"
             v-model="searchQuery"
             @input="handleSearchInput"

@@ -108,6 +108,16 @@
         </div>
         <!-- Reviews Feed -->
         <template v-else>
+          <!-- Empty state when no reviews -->
+          <div v-if="reviews.length === 0" class="empty-feed-message">
+            <p>No reviews to show yet.</p>
+            <p>
+              <router-link to="/profile" class="profile-link">
+                Add friends
+              </router-link>
+              to see their reviews!
+            </p>
+          </div>
           <div class="review-card" v-for="review in reviews" :key="review.id">
             <div class="review-header">
               <img
@@ -1771,6 +1781,42 @@ export default {
   border: 1px solid rgba(123, 140, 168, 0.2);
   border-radius: 8px;
   backdrop-filter: blur(10px);
+}
+
+.empty-feed-message {
+  text-align: center;
+  padding: 4rem 2rem;
+  background: rgba(26, 35, 52, 0.6);
+  border: 1px solid rgba(123, 140, 168, 0.2);
+  border-radius: 8px;
+  backdrop-filter: blur(10px);
+}
+
+.empty-feed-message p {
+  color: #7b8ca8;
+  font-size: 1.1rem;
+  margin: 0.5rem 0;
+  line-height: 1.6;
+}
+
+.empty-feed-message p:first-child {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #ffffff;
+  margin-bottom: 1rem;
+}
+
+.profile-link {
+  color: #4a9eff;
+  text-decoration: none;
+  font-weight: 600;
+  transition: color 0.2s ease;
+  border-bottom: 1px solid transparent;
+}
+
+.profile-link:hover {
+  color: #7b68ee;
+  border-bottom-color: #7b68ee;
 }
 
 .load-more-feed {

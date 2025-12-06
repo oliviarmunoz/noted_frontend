@@ -121,9 +121,6 @@
         </div>
 
         <div class="nav-actions">
-          <button class="icon-btn">
-            <span class="icon">+</span>
-          </button>
           <!-- TODO: Add profile page -->
           <router-link to="/profile" class="icon-btn">
             <span class="icon">👤</span>

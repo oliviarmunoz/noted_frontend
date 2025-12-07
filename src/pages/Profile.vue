@@ -279,10 +279,7 @@
                         <span v-else class="friend-icon">👤</span>
                       </div>
                       <div class="friend-info">
-                        <div
-                          class="friend-name clickable-name"
-                          @click="navigateToUserProfile(request.requester)"
-                        >
+                        <div class="friend-name">
                           {{ request.requesterName || request.requester }}
                         </div>
                       </div>
@@ -330,10 +327,7 @@
                         <span v-else class="friend-icon">👤</span>
                       </div>
                       <div class="friend-info">
-                        <div
-                          class="friend-name clickable-name"
-                          @click="navigateToUserProfile(request.target)"
-                        >
+                        <div class="friend-name">
                           {{ request.targetName || request.target }}
                         </div>
                       </div>
@@ -596,6 +590,7 @@ export default {
     const username = ref("");
     const reviews = ref([]);
     const friends = ref([]);
+    const currentUserFriends = ref([]); // Friends of the current logged-in user
     const incomingRequests = ref([]);
     const outgoingRequests = ref([]);
 
@@ -1530,7 +1525,11 @@ export default {
         showToastNotification("Friend request accepted!");
 
         // Reload friends and requests
-        await Promise.all([loadFriends(), loadFriendRequests()]);
+        await Promise.all([
+          loadFriends(),
+          loadFriendRequests(),
+          loadCurrentUserFriends(),
+        ]);
       } catch (error) {
         console.error("[Profile] Error accepting friend request:", error);
         showToastNotification(
@@ -1631,7 +1630,7 @@ export default {
         showToastNotification("Friend removed");
 
         // Reload friends
-        await loadFriends();
+        await Promise.all([loadFriends(), loadCurrentUserFriends()]);
       } catch (error) {
         console.error("[Profile] Error removing friend:", error);
         showToastNotification(error.message || "Failed to remove friend");
@@ -1697,6 +1696,15 @@ export default {
       }
     );
 
+    // Watch for currentUserId changes to load current user's friends
+    watch(
+      () => currentUserId.value,
+      async () => {
+        await loadCurrentUserFriends();
+      },
+      { immediate: true }
+    );
+
     // Watch for userId changes (after resolution from username)
     watch(
       () => userId.value,
@@ -1729,9 +1737,41 @@ export default {
       { immediate: true }
     );
 
-    // Navigate to user profile by username
+    // Load current user's friends list (for checking friendship status)
+    const loadCurrentUserFriends = async () => {
+      if (!currentUserId.value) {
+        currentUserFriends.value = [];
+        return;
+      }
+
+      try {
+        const result = await friending.getFriends(currentUserId.value);
+        if (result && !result.error) {
+          currentUserFriends.value = result || [];
+        } else {
+          currentUserFriends.value = [];
+        }
+      } catch (error) {
+        console.error("[Profile] Error loading current user's friends:", error);
+        currentUserFriends.value = [];
+      }
+    };
+
+    // Navigate to user profile by username (only if already friends)
     const navigateToUserProfile = async (targetUserId) => {
       if (!targetUserId) return;
+
+      // Check if the target user is in the current logged-in user's friends list
+      const isFriend = currentUserFriends.value.some(
+        (f) => f.friend === targetUserId
+      );
+
+      if (!isFriend) {
+        showToastNotification(
+          "You can only view profiles of users you are friends with"
+        );
+        return;
+      }
 
       try {
         // Get username from userId

@@ -418,6 +418,40 @@
           </div>
         </section>
 
+        <section class="profile-section">
+          <h2 class="section-title">FRIEND RECOMMENDATIONS</h2>
+          <div v-if="loadingFriendRecommendations" class="loading-text">
+            Loading friend recommendations...
+          </div>
+          <div v-else-if="friendRecommendationsItems.length === 0" class="empty-message">
+            No friend recommendations yet
+          </div>
+          <div v-else class="playlist-items-list">
+            <div
+              v-for="item in friendRecommendationsItems"
+              :key="item.item"
+              class="playlist-item"
+              @click="navigateToReview(item)"
+            >
+              <img
+                v-if="item.imageUrl"
+                :src="item.imageUrl"
+                :alt="item.name"
+                class="playlist-item-thumbnail"
+              />
+              <div v-else class="playlist-item-thumbnail-placeholder">
+                {{ item.name?.charAt(0) || "?" }}
+              </div>
+              <div class="playlist-item-info">
+                <div class="playlist-item-name">
+                  {{ item.name || "Unknown" }}
+                </div>
+                <div class="playlist-item-artist">{{ item.artist || "" }}</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <!-- Reviews Section -->
         <section class="profile-section">
           <h2 class="section-title">REVIEWS</h2>
@@ -934,8 +968,10 @@ export default {
     // Playlist items for display
     const favoritesItems = ref([]);
     const listenLaterItems = ref([]);
+    const friendRecommendationsItems = ref([]);
     const loadingFavorites = ref(false);
     const loadingListenLater = ref(false);
+    const loadingFriendRecommendations = ref(false);
 
     // Load playlist counts (lightweight - no entity details)
     const loadPlaylistCounts = async () => {
@@ -1165,6 +1201,104 @@ export default {
         listenLaterItems.value = [];
       } finally {
         loadingListenLater.value = false;
+      }
+
+      // Load Friend Recommendations
+      loadingFriendRecommendations.value = true;
+      try {
+        const friendRecommendationsResult = await playlist.getPlaylistItems(
+          userId.value,
+          "Friend Recommendations"
+        );
+        if (friendRecommendationsResult && !friendRecommendationsResult.error) {
+          // Load entity details for each item
+          friendRecommendationsItems.value = await Promise.all(
+            (friendRecommendationsResult || []).slice(0, 20).map(async (itemObj) => {
+              const itemId = itemObj.item || itemObj;
+              try {
+                // Try as external ID first (playlist items are stored as externalId)
+                let entityResponse = await musicDiscovery.getEntityFromId(
+                  itemId
+                );
+
+                // Extract musicEntity from response
+                let musicEntity = null;
+                if (
+                  Array.isArray(entityResponse) &&
+                  entityResponse.length > 0
+                ) {
+                  musicEntity =
+                    entityResponse[0].musicEntity || entityResponse[0];
+                } else if (entityResponse?.musicEntity) {
+                  musicEntity = entityResponse.musicEntity;
+                } else if (entityResponse && !entityResponse.error) {
+                  musicEntity = entityResponse;
+                }
+
+                // If that didn't work, try as URI
+                if (!musicEntity || musicEntity.error) {
+                  try {
+                    entityResponse = await musicDiscovery.getEntityFromUri(
+                      itemId
+                    );
+                    if (
+                      Array.isArray(entityResponse) &&
+                      entityResponse.length > 0
+                    ) {
+                      musicEntity =
+                        entityResponse[0].musicEntity || entityResponse[0];
+                    } else if (entityResponse?.musicEntity) {
+                      musicEntity = entityResponse.musicEntity;
+                    } else if (entityResponse && !entityResponse.error) {
+                      musicEntity = entityResponse;
+                    }
+                  } catch (e) {
+                    console.warn(
+                      `[Profile] Could not load entity by URI for ${itemId}:`,
+                      e
+                    );
+                  }
+                }
+
+                if (musicEntity && !musicEntity.error) {
+                  return {
+                    item: itemId,
+                    name: musicEntity.name || "Unknown",
+                    artist: musicEntity.artistName || musicEntity.artist || "",
+                    uri: musicEntity.uri || musicEntity.externalId || itemId,
+                    imageUrl: musicEntity.imageUrl || null,
+                  };
+                }
+                return {
+                  item: itemId,
+                  name: "Unknown",
+                  artist: "",
+                  uri: itemId,
+                  imageUrl: null,
+                };
+              } catch (err) {
+                console.warn(
+                  `[Profile] Error loading entity for friend recommendation ${itemId}:`,
+                  err
+                );
+                return {
+                  item: itemId,
+                  name: "Unknown",
+                  artist: "",
+                  uri: itemId,
+                  imageUrl: null,
+                };
+              }
+            })
+          );
+        } else {
+          friendRecommendationsItems.value = [];
+        }
+      } catch (error) {
+        console.error("[Profile] Error loading friend recommendations:", error);
+        friendRecommendationsItems.value = [];
+      } finally {
+        loadingFriendRecommendations.value = false;
       }
     };
 
@@ -1762,11 +1896,17 @@ export default {
       if (!targetUserId) return;
 
       // Check if the target user is in the current logged-in user's friends list
-      const isFriend = currentUserFriends.value.some(
-        (f) => f.friend === targetUserId
+      const isCurrentUserFriend = currentUserFriends.value.some(
+        (f) => f.friend === targetUserId || f === targetUserId
       );
 
-      if (!isFriend) {
+      // Also check if the target is in the friends list of the profile being viewed
+      // (this allows viewing friends of friends when viewing someone else's profile)
+      const isViewedProfileFriend = friends.value.some(
+        (f) => f.friend === targetUserId || f === targetUserId
+      );
+
+      if (!isCurrentUserFriend && !isViewedProfileFriend) {
         showToastNotification(
           "You can only view profiles of users you are friends with"
         );
@@ -1809,8 +1949,10 @@ export default {
       listenLaterCount,
       favoritesItems,
       listenLaterItems,
+      friendRecommendationsItems,
       loadingFavorites,
       loadingListenLater,
+      loadingFriendRecommendations,
       friends,
       incomingRequests,
       outgoingRequests,

@@ -81,6 +81,28 @@
               </svg>
               <span class="playlist-text">Listen Later</span>
             </button>
+            <button
+              @click="showFriendRecommendModal = true"
+              class="playlist-action-btn friend-recommend-btn"
+              title="Recommend to Friend"
+            >
+              <svg
+                class="playlist-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                xmlns="http://www.w3.org/2000/svg"
+                style="vertical-align: middle"
+              >
+                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                <circle cx="8.5" cy="7" r="4"></circle>
+                <path d="M20 8v6M23 11h-6"></path>
+              </svg>
+              <span class="playlist-text">Recommend to Friend</span>
+            </button>
           </div>
         </div>
 
@@ -259,6 +281,72 @@
         </div>
       </transition>
 
+      <!-- Friend Recommendation Modal -->
+      <transition name="modal">
+        <div
+          v-if="showFriendRecommendModal"
+          class="modal-overlay"
+          @click.self="showFriendRecommendModal = false"
+        >
+          <div class="modal-content">
+            <h3 class="modal-title">Recommend to Friend</h3>
+            <button class="modal-close" @click="showFriendRecommendModal = false">
+              ×
+            </button>
+            <div class="friend-recommend-content">
+              <div v-if="loadingFriends" class="loading-text">
+                Loading friends...
+              </div>
+              <div v-else-if="friendsError" class="error-text">
+                {{ friendsError }}
+              </div>
+              <div v-else-if="friends.length === 0" class="empty-message">
+                You don't have any friends yet. Add friends from your profile!
+              </div>
+              <div v-else class="friends-list-modal">
+                <input
+                  type="text"
+                  v-model="friendSearchQuery"
+                  placeholder="Search friends..."
+                  class="friend-search-input"
+                  @input="filterFriends"
+                />
+                <div class="friends-scrollable">
+                  <div
+                    v-for="friend in filteredFriends"
+                    :key="friend.friend"
+                    class="friend-item-modal"
+                    @click="handleRecommendToFriend(friend)"
+                  >
+                    <div class="friend-avatar">
+                      <img
+                        v-if="friend.friendThumbnail"
+                        :src="friend.friendThumbnail"
+                        :alt="friend.friendName || friend.friend"
+                        class="friend-avatar-image"
+                      />
+                      <span v-else class="friend-icon">👤</span>
+                    </div>
+                    <div class="friend-info">
+                      <div class="friend-name">
+                        {{ friend.friendName || friend.friend }}
+                      </div>
+                    </div>
+                    <button
+                      class="recommend-btn"
+                      @click.stop="handleRecommendToFriend(friend)"
+                      :disabled="recommendingToFriend === friend.friend"
+                    >
+                      {{ recommendingToFriend === friend.friend ? "..." : "Recommend" }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </transition>
+
       <!-- Delete Confirmation Modal -->
       <transition name="modal">
         <div
@@ -305,7 +393,7 @@
 <script>
 import { ref, computed, watch, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { review, musicDiscovery, auth } from "../api/api.js";
+import { review, musicDiscovery, auth, playlist, friending, userProfile } from "../api/api.js";
 import { usePlaylists } from "../composables/usePlaylists.js";
 import { useToast } from "../composables/useToast.js";
 import { usePlaylistEvents } from "../composables/usePlaylistEvents.js";
@@ -337,6 +425,13 @@ export default {
     const showDeleteModal = ref(false);
     const deleteModalType = ref(null); // 'review' or 'comment'
     const deleteModalData = ref(null);
+    const showFriendRecommendModal = ref(false);
+    const friends = ref([]);
+    const loadingFriends = ref(false);
+    const friendsError = ref(null);
+    const friendSearchQuery = ref("");
+    const filteredFriends = ref([]);
+    const recommendingToFriend = ref(null);
 
     const uri = computed(() => route.params.id);
 
@@ -1095,6 +1190,146 @@ export default {
       }
     };
 
+    // Load friends for recommendation
+    const loadFriends = async () => {
+      if (!userId.value) {
+        friends.value = [];
+        return;
+      }
+
+      loadingFriends.value = true;
+      friendsError.value = null;
+
+      try {
+        const result = await friending.getFriends(userId.value);
+
+        if (result && result.error) {
+          friendsError.value = result.error;
+          friends.value = [];
+          filteredFriends.value = [];
+          return;
+        }
+
+        // Load usernames and thumbnails for each friend
+        const friendsWithNames = await Promise.all(
+          (result || []).map(async (friendItem) => {
+            try {
+              const [usernameResult, thumbnailResult] = await Promise.all([
+                auth.getUsername(friendItem.friend),
+                userProfile.getThumbnail(friendItem.friend),
+              ]);
+
+              const usernameData =
+                Array.isArray(usernameResult) && usernameResult.length > 0
+                  ? usernameResult[0]
+                  : usernameResult;
+              const username = usernameData?.username || friendItem.friend;
+
+              const thumbnailData =
+                Array.isArray(thumbnailResult) && thumbnailResult.length > 0
+                  ? thumbnailResult[0]
+                  : thumbnailResult;
+              const thumbnailUrl = thumbnailData?.thumbnailUrl || thumbnailData?.thumbnail || null;
+
+              return {
+                ...friendItem,
+                friendName: username,
+                friendThumbnail: thumbnailUrl,
+              };
+            } catch (err) {
+              console.error(
+                `[Review] Error loading username/thumbnail for friend ${friendItem.friend}:`,
+                err
+              );
+              return {
+                ...friendItem,
+                friendName: friendItem.friend,
+                friendThumbnail: null,
+              };
+            }
+          })
+        );
+
+        friends.value = friendsWithNames;
+        filteredFriends.value = friendsWithNames;
+      } catch (err) {
+        console.error("[Review] Error loading friends:", err);
+        friendsError.value = err.message || "Failed to load friends";
+        friends.value = [];
+        filteredFriends.value = [];
+      } finally {
+        loadingFriends.value = false;
+      }
+    };
+
+    // Filter friends based on search query
+    const filterFriends = () => {
+      const query = friendSearchQuery.value.toLowerCase().trim();
+      if (!query) {
+        filteredFriends.value = friends.value;
+        return;
+      }
+
+      filteredFriends.value = friends.value.filter((friend) => {
+        const name = (friend.friendName || friend.friend || "").toLowerCase();
+        return name.includes(query);
+      });
+    };
+
+    // Recommend song to friend
+    const handleRecommendToFriend = async (friend) => {
+      if (!userId.value || !friend || !friend.friend) {
+        showToastNotification("Error: Invalid friend selection");
+        return;
+      }
+
+      if (!songInfo.value?.externalId && !itemId.value) {
+        showToastNotification("Error: Song ID not found");
+        return;
+      }
+
+      const itemIdToUse = songInfo.value?.externalId || itemId.value;
+      recommendingToFriend.value = friend.friend;
+
+      try {
+        const result = await playlist.addItemToFriendPlaylist(
+          friend.friend,
+          itemIdToUse,
+          "Friend Recommendations"
+        );
+
+        if (result && result.error) {
+          showToastNotification(
+            result.error || "Failed to recommend song to friend"
+          );
+          return;
+        }
+
+        showToastNotification(
+          `Recommended "${songInfo.value.name}" to ${friend.friendName || friend.friend}!`
+        );
+        showFriendRecommendModal.value = false;
+        friendSearchQuery.value = "";
+      } catch (err) {
+        console.error("[Review] Error recommending to friend:", err);
+        showToastNotification(
+          err.message || "Failed to recommend song to friend"
+        );
+      } finally {
+        recommendingToFriend.value = null;
+      }
+    };
+
+    // Watch for modal opening to load friends
+    watch(
+      () => showFriendRecommendModal.value,
+      (isOpen) => {
+        if (isOpen && friends.value.length === 0 && !loadingFriends.value) {
+          loadFriends();
+        }
+      }
+    );
+
     // Navigate to user profile by username
     const navigateToUserProfile = async (targetUserId) => {
       if (!targetUserId) return;
@@ -1165,6 +1400,15 @@ export default {
       reviewsHasMore,
       loadingMoreReviews,
       navigateToUserProfile,
+      showFriendRecommendModal,
+      friends,
+      loadingFriends,
+      friendsError,
+      friendSearchQuery,
+      filteredFriends,
+      recommendingToFriend,
+      filterFriends,
+      handleRecommendToFriend,
     };
   },
 };
@@ -1373,6 +1617,17 @@ export default {
   background: rgba(10, 14, 26, 0.95);
   border-color: rgba(123, 104, 238, 0.4);
   box-shadow: 0 4px 12px rgba(123, 104, 238, 0.15);
+}
+
+.friend-recommend-btn {
+  color: #4ade80;
+}
+
+.friend-recommend-btn:hover {
+  background: rgba(10, 14, 26, 0.95);
+  border-color: rgba(74, 222, 128, 0.4);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(74, 222, 128, 0.15);
 }
 
 .playlist-icon {
@@ -1852,10 +2107,34 @@ export default {
   border: 1px solid rgba(123, 140, 168, 0.3);
   border-radius: 8px;
   padding: 2rem;
-  max-width: 400px;
+  max-width: 500px;
   width: 90%;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(10px);
+  position: relative;
+}
+
+.modal-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: none;
+  border: none;
+  color: #7b8ca8;
+  font-size: 1.5rem;
+  cursor: pointer;
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.modal-close:hover {
+  background: rgba(123, 140, 168, 0.1);
+  color: #ffffff;
 }
 
 .modal-title {
@@ -1939,6 +2218,143 @@ export default {
   transform: scale(0.95) translateY(-10px);
 }
 
+/* Friend Recommendation Modal Styles */
+.friend-recommend-content {
+  margin-top: 1.5rem;
+}
+
+.friend-search-input {
+  width: 100%;
+  padding: 0.75rem;
+  background: rgba(10, 14, 26, 0.6);
+  border: 1px solid rgba(123, 140, 168, 0.2);
+  border-radius: 4px;
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 0.95rem;
+  margin-bottom: 1rem;
+}
+
+.friend-search-input:focus {
+  outline: none;
+  border-color: #4a9eff;
+}
+
+.friend-search-input::placeholder {
+  color: #4a5568;
+}
+
+.friends-list-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.friends-scrollable {
+  max-height: 400px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.friends-scrollable::-webkit-scrollbar {
+  width: 8px;
+}
+
+.friends-scrollable::-webkit-scrollbar-track {
+  background: rgba(10, 14, 26, 0.3);
+  border-radius: 4px;
+}
+
+.friends-scrollable::-webkit-scrollbar-thumb {
+  background: rgba(123, 140, 168, 0.3);
+  border-radius: 4px;
+}
+
+.friends-scrollable::-webkit-scrollbar-thumb:hover {
+  background: rgba(123, 140, 168, 0.5);
+}
+
+.friend-item-modal {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: rgba(10, 14, 26, 0.6);
+  border: 1px solid rgba(123, 140, 168, 0.2);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.friend-item-modal:hover {
+  background: rgba(10, 14, 26, 0.8);
+  border-color: rgba(74, 158, 255, 0.3);
+}
+
+.friend-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: rgba(74, 158, 255, 0.1);
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.friend-avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.friend-icon {
+  font-size: 1.5rem;
+  color: #7b8ca8;
+}
+
+.friend-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.friend-name {
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 0.95rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recommend-btn {
+  padding: 0.5rem 1rem;
+  background: rgba(74, 222, 128, 0.1);
+  border: 1px solid rgba(74, 222, 128, 0.3);
+  border-radius: 4px;
+  color: #4ade80;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.recommend-btn:hover:not(:disabled) {
+  background: rgba(74, 222, 128, 0.2);
+  border-color: #4ade80;
+  transform: translateY(-1px);
+}
+
+.recommend-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 @media (max-width: 768px) {
   .song-content {
     grid-template-columns: 1fr;
@@ -1964,6 +2380,14 @@ export default {
 
   .modal-btn {
     width: 100%;
+  }
+
+  .friends-scrollable {
+    max-height: 300px;
+  }
+
+  .friend-item-modal {
+    padding: 0.75rem;
   }
 }
 </style>

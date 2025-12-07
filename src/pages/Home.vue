@@ -93,6 +93,52 @@
             </li>
           </ul>
         </div>
+
+        <div class="sidebar-section">
+          <h2
+            class="sidebar-title clickable-title"
+            @click="$router.push('/playlists#friend-recommendations')"
+          >
+            FRIEND RECOMMENDATIONS
+          </h2>
+          <div v-if="loadingFriendRecommendations" class="loading-text">Loading...</div>
+          <div v-else-if="friendRecommendationsError" class="error-text">
+            {{ friendRecommendationsError }}
+          </div>
+          <ul v-else class="song-list">
+            <li
+              v-for="item in friendRecommendationsItems"
+              :key="item.item"
+              class="song-item"
+            >
+              <div class="song-item-content" @click="navigateToReview(item)">
+                <img
+                  v-if="item.imageUrl"
+                  :src="item.imageUrl"
+                  :alt="item.name"
+                  class="song-thumbnail"
+                />
+                <div v-else class="song-thumbnail-placeholder">
+                  {{ item.name?.charAt(0) || "?" }}
+                </div>
+                <div class="song-info">
+                  <div class="song-name">{{ item.name || "Loading..." }}</div>
+                  <div class="song-artist">{{ item.artist || "" }}</div>
+                </div>
+              </div>
+              <button
+                class="remove-btn"
+                @click.stop="removeFromPlaylist(item, 'Friend Recommendations')"
+                title="Remove from Friend Recommendations"
+              >
+                ×
+              </button>
+            </li>
+            <li v-if="friendRecommendationsItems.length === 0" class="empty-message">
+              No friend recommendations yet
+            </li>
+          </ul>
+        </div>
       </aside>
 
       <!-- Main Feed -->
@@ -308,10 +354,13 @@ export default {
 
     const favoritesItems = ref([]);
     const listenLaterItems = ref([]);
+    const friendRecommendationsItems = ref([]);
     const loadingFavorites = ref(false);
     const loadingListenLater = ref(false);
+    const loadingFriendRecommendations = ref(false);
     const favoritesError = ref(null);
     const listenLaterError = ref(null);
+    const friendRecommendationsError = ref(null);
 
     // Use composables
     const { loadPlaylistItems, removeItemFromPlaylist } = usePlaylists();
@@ -717,12 +766,169 @@ export default {
         // Reload the playlist
         if (playlistName === "Favorites") {
           await loadFavorites();
-        } else {
+        } else if (playlistName === "Listen Later") {
           await loadListenLater();
+        } else if (playlistName === "Friend Recommendations") {
+          await loadFriendRecommendations();
         }
       } catch (error) {
         console.error(`[Home] Error removing from ${playlistName}:`, error);
         showToastNotification(`Error removing from ${playlistName}`);
+      }
+    };
+
+    // Load friend recommendations with enhanced entity information
+    const loadFriendRecommendations = async () => {
+      if (!userId.value) {
+        friendRecommendationsItems.value = [];
+        return;
+      }
+
+      loadingFriendRecommendations.value = true;
+      friendRecommendationsError.value = null;
+
+      try {
+        // Load only first 10 items for sidebar
+        const result = await loadPlaylistItems("Friend Recommendations", 10, 0);
+        if (result.error) {
+          friendRecommendationsError.value = result.error;
+          friendRecommendationsItems.value = [];
+        } else {
+          // Enhance items with entity information if not already complete
+          friendRecommendationsItems.value = await Promise.all(
+            (result.items || []).map(async (item) => {
+              // If item already has complete info, return as is
+              if (
+                item.name &&
+                item.name !== "Unknown" &&
+                item.artist !== undefined
+              ) {
+                return item;
+              }
+
+              // Otherwise, try to get entity information
+              const itemId = item.item || item;
+              try {
+                // Try as external ID first
+                let entityResponse = await musicDiscovery.getEntityFromId(
+                  itemId
+                );
+
+                // Extract musicEntity from response
+                let musicEntity = null;
+                if (
+                  Array.isArray(entityResponse) &&
+                  entityResponse.length > 0
+                ) {
+                  musicEntity =
+                    entityResponse[0].musicEntity || entityResponse[0];
+                } else if (entityResponse?.musicEntity) {
+                  musicEntity = entityResponse.musicEntity;
+                } else if (entityResponse && !entityResponse.error) {
+                  musicEntity = entityResponse;
+                }
+
+                // If that didn't work, try as URI
+                if (!musicEntity || musicEntity.error) {
+                  try {
+                    entityResponse = await musicDiscovery.getEntityFromUri(
+                      itemId
+                    );
+                    if (
+                      Array.isArray(entityResponse) &&
+                      entityResponse.length > 0
+                    ) {
+                      musicEntity =
+                        entityResponse[0].musicEntity || entityResponse[0];
+                    } else if (entityResponse?.musicEntity) {
+                      musicEntity = entityResponse.musicEntity;
+                    } else if (entityResponse && !entityResponse.error) {
+                      musicEntity = entityResponse;
+                    }
+                  } catch (e) {
+                    console.warn(
+                      `[Home] Could not load entity by URI for ${itemId}:`,
+                      e
+                    );
+                  }
+                }
+
+                // Get review information for this item
+                let reviewData = null;
+                try {
+                  const reviewResponse = await review.getReviewByItemAndUser(
+                    itemId,
+                    userId.value
+                  );
+                  // API returns array: [{ "review": "string", "rating": "number", "notes": "string" }]
+                  if (
+                    reviewResponse &&
+                    !reviewResponse.error &&
+                    Array.isArray(reviewResponse) &&
+                    reviewResponse.length > 0
+                  ) {
+                    reviewData = reviewResponse[0];
+                  } else if (
+                    reviewResponse &&
+                    !reviewResponse.error &&
+                    reviewResponse.rating
+                  ) {
+                    reviewData = reviewResponse;
+                  }
+                } catch (reviewErr) {
+                  console.warn(
+                    `[Home] Could not load review for ${itemId}:`,
+                    reviewErr
+                  );
+                }
+
+                // Update item with entity information
+                if (musicEntity && !musicEntity.error) {
+                  return {
+                    item: item.item || itemId,
+                    name: musicEntity.name || item.name || "Unknown",
+                    artist:
+                      musicEntity.artistName ||
+                      musicEntity.artist ||
+                      item.artist ||
+                      "",
+                    uri:
+                      musicEntity.uri ||
+                      musicEntity.externalId ||
+                      item.uri ||
+                      itemId,
+                    imageUrl: musicEntity.imageUrl || item.imageUrl || null,
+                    rating: reviewData?.rating || null,
+                    reviewNotes: reviewData?.notes || null,
+                  };
+                }
+
+                // If entity loading failed but we have review data, include it
+                if (reviewData) {
+                  return {
+                    ...item,
+                    rating: reviewData.rating || null,
+                    reviewNotes: reviewData.notes || null,
+                  };
+                }
+              } catch (err) {
+                console.warn(
+                  `[Home] Error loading entity info for ${itemId}:`,
+                  err
+                );
+              }
+
+              // Return original item if entity loading failed
+              return item;
+            })
+          );
+        }
+      } catch (error) {
+        console.error("[Home] Error loading friend recommendations:", error);
+        friendRecommendationsError.value = error.message || "Failed to load friend recommendations";
+        friendRecommendationsItems.value = [];
+      } finally {
+        loadingFriendRecommendations.value = false;
       }
     };
 
@@ -736,6 +942,8 @@ export default {
             loadFavorites();
           } else if (update.playlistName === "Listen Later") {
             loadListenLater();
+          } else if (update.playlistName === "Friend Recommendations") {
+            loadFriendRecommendations();
           }
         }
       }
@@ -745,6 +953,7 @@ export default {
     onMounted(() => {
       loadFavorites();
       loadListenLater();
+      loadFriendRecommendations();
     });
 
     // Expose userId for use in methods (Options API)
@@ -783,10 +992,13 @@ export default {
     return {
       favoritesItems,
       listenLaterItems,
+      friendRecommendationsItems,
       loadingFavorites,
       loadingListenLater,
+      loadingFriendRecommendations,
       favoritesError,
       listenLaterError,
+      friendRecommendationsError,
       navigateToReview,
       navigateFromFeed,
       removeFromPlaylist,
@@ -1412,7 +1624,8 @@ export default {
   font-size: 0.85rem;
   font-style: italic;
   list-style: none;
-  white-space: nowrap;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 /* Feed */

@@ -114,6 +114,62 @@
           </div>
         </div>
       </div>
+
+      <!-- Friend Recommendations Section -->
+      <div id="friend-recommendations" class="playlist-section">
+        <div class="playlist-header">
+          <h2 class="playlist-title">FRIEND RECOMMENDATIONS</h2>
+          <span class="playlist-count" v-if="!loadingFriendRecommendations">
+            ({{ friendRecommendationsItems.length }})
+          </span>
+        </div>
+
+        <div v-if="loadingFriendRecommendations" class="loading-state">Loading friend recommendations...</div>
+        <div v-else-if="friendRecommendationsError" class="error-state">{{ friendRecommendationsError }}</div>
+        <div v-else-if="friendRecommendationsItems.length === 0" class="empty-state">
+          <p>Your friends haven't recommended any songs yet. Ask them to recommend songs to you!</p>
+        </div>
+        <div
+          v-else
+          class="playlist-items-container"
+          @scroll="handleScroll($event, 'Friend Recommendations')"
+        >
+          <ul class="playlist-items">
+            <li
+              v-for="item in friendRecommendationsItems"
+              :key="item.item"
+              class="playlist-item"
+            >
+              <div class="item-content" @click="navigateToReview(item)">
+                <img
+                  v-if="item.imageUrl"
+                  :src="item.imageUrl"
+                  :alt="item.name"
+                  class="item-thumbnail"
+                />
+                <div v-else class="item-thumbnail-placeholder">
+                  {{ item.name?.charAt(0) || "?" }}
+                </div>
+                <div class="item-info">
+                  <div class="item-name">{{ item.name || "Unknown" }}</div>
+                  <div class="item-artist">{{ item.artist || "" }}</div>
+                </div>
+              </div>
+              <button
+                class="remove-item-btn"
+                @click.stop="removeFromPlaylist(item, 'Friend Recommendations')"
+                title="Remove from Friend Recommendations"
+              >
+                ×
+              </button>
+            </li>
+          </ul>
+          <div v-if="friendRecommendationsLoadingMore" class="loading-more">Loading more...</div>
+          <div v-else-if="!friendRecommendationsHasMore && friendRecommendationsItems.length > 0" class="end-message">
+            All songs loaded
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -135,14 +191,19 @@ export default {
     const userId = ref(null);
     const favoritesItems = ref([]);
     const listenLaterItems = ref([]);
+    const friendRecommendationsItems = ref([]);
     const loadingFavorites = ref(false);
     const loadingListenLater = ref(false);
+    const loadingFriendRecommendations = ref(false);
     const favoritesError = ref(null);
     const listenLaterError = ref(null);
+    const friendRecommendationsError = ref(null);
     const favoritesHasMore = ref(false);
     const listenLaterHasMore = ref(false);
+    const friendRecommendationsHasMore = ref(false);
     const favoritesLoadingMore = ref(false);
     const listenLaterLoadingMore = ref(false);
+    const friendRecommendationsLoadingMore = ref(false);
     const ITEMS_PER_PAGE = 20;
 
     // Update userId when currentUser changes
@@ -234,6 +295,44 @@ export default {
       }
     };
 
+    // Load friend recommendations
+    const loadFriendRecommendations = async (loadMore = false) => {
+      if (loadMore) {
+        friendRecommendationsLoadingMore.value = true;
+      } else {
+        loadingFriendRecommendations.value = true;
+        friendRecommendationsError.value = null;
+        friendRecommendationsItems.value = [];
+      }
+
+      try {
+        const offset = loadMore ? friendRecommendationsItems.value.length : 0;
+        const result = await loadPlaylistItems("Friend Recommendations", ITEMS_PER_PAGE, offset);
+        if (result.error) {
+          friendRecommendationsError.value = result.error;
+          if (!loadMore) {
+            friendRecommendationsItems.value = [];
+          }
+        } else {
+          if (loadMore) {
+            friendRecommendationsItems.value = [...friendRecommendationsItems.value, ...result.items];
+          } else {
+            friendRecommendationsItems.value = result.items;
+          }
+          friendRecommendationsHasMore.value = result.hasMore;
+        }
+      } catch (error) {
+        console.error("[Playlists] Error loading friend recommendations:", error);
+        friendRecommendationsError.value = error.message || "Failed to load friend recommendations";
+        if (!loadMore) {
+          friendRecommendationsItems.value = [];
+        }
+      } finally {
+        loadingFriendRecommendations.value = false;
+        friendRecommendationsLoadingMore.value = false;
+      }
+    };
+
     // Navigate to review page
     const navigateToReview = (item) => {
       if (!item.uri) {
@@ -265,8 +364,10 @@ export default {
         // Reload the playlist
         if (playlistName === "Favorites") {
           await loadFavorites();
-        } else {
+        } else if (playlistName === "Listen Later") {
           await loadListenLater();
+        } else if (playlistName === "Friend Recommendations") {
+          await loadFriendRecommendations();
         }
       } catch (error) {
         console.error(`[Playlists] Error removing from ${playlistName}:`, error);
@@ -284,6 +385,8 @@ export default {
             loadFavorites();
           } else if (update.playlistName === "Listen Later") {
             loadListenLater();
+          } else if (update.playlistName === "Friend Recommendations") {
+            loadFriendRecommendations();
           }
         }
       }
@@ -307,6 +410,7 @@ export default {
     onMounted(() => {
       loadFavorites();
       loadListenLater();
+      loadFriendRecommendations();
       scrollToSection();
     });
 
@@ -329,6 +433,8 @@ export default {
           loadFavorites(true);
         } else if (playlistName === "Listen Later" && listenLaterHasMore.value && !listenLaterLoadingMore.value && !loadingListenLater.value) {
           loadListenLater(true);
+        } else if (playlistName === "Friend Recommendations" && friendRecommendationsHasMore.value && !friendRecommendationsLoadingMore.value && !loadingFriendRecommendations.value) {
+          loadFriendRecommendations(true);
         }
       }
     };
@@ -336,19 +442,25 @@ export default {
     return {
       favoritesItems,
       listenLaterItems,
+      friendRecommendationsItems,
       loadingFavorites,
       loadingListenLater,
+      loadingFriendRecommendations,
       favoritesError,
       listenLaterError,
+      friendRecommendationsError,
       favoritesHasMore,
       listenLaterHasMore,
+      friendRecommendationsHasMore,
       favoritesLoadingMore,
       listenLaterLoadingMore,
+      friendRecommendationsLoadingMore,
       navigateToReview,
       removeFromPlaylist,
       handleScroll,
       loadFavorites,
       loadListenLater,
+      loadFriendRecommendations,
     };
   },
 };

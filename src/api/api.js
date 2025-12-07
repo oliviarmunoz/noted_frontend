@@ -73,6 +73,9 @@ export const playlist = {
   addItem: (user, item, playlistName) =>
     apiCall("/api/Playlist/addItem", { user, item, playlistName }),
 
+  addItemToFriendPlaylist: (friendUserId, item, playlistName) =>
+    apiCall("/api/Playlist/addItem", { user: friendUserId, item, playlistName }),
+
   deleteItem: (user, item, playlistName) =>
     apiCall("/api/Playlist/deleteItem", { user, item, playlistName }),
 

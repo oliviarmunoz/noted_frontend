@@ -100,10 +100,7 @@
               Search songs to add to Favorites
             </li>
             <li v-if="favoritesItems.length > 3" class="view-all-item">
-              <button
-                class="view-all-btn"
-                @click="$router.push('/playlists')"
-              >
+              <button class="view-all-btn" @click="$router.push('/playlists')">
                 View All
               </button>
             </li>
@@ -158,7 +155,10 @@
             >
               No friend recommendations yet
             </li>
-            <li v-if="friendRecommendationsItems.length > 3" class="view-all-item">
+            <li
+              v-if="friendRecommendationsItems.length > 3"
+              class="view-all-item"
+            >
               <button
                 class="view-all-btn"
                 @click="$router.push('/playlists#friend-recommendations')"

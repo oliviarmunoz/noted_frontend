@@ -156,7 +156,7 @@ import { musicDiscovery } from "./api/api.js";
 import { usePlaylists } from "./composables/usePlaylists.js";
 import { useToast } from "./composables/useToast.js";
 import { usePlaylistEvents } from "./composables/usePlaylistEvents.js";
-import { useAuth, getUserId } from "./composables/useAuth.js";
+import { useAuth, getUserId, getSession } from "./composables/useAuth.js";
 
 export default {
   name: "App",
@@ -188,14 +188,14 @@ export default {
       searchResults.value = [];
 
       try {
-        const userId = getUserId();
-        if (!userId) {
+        const session = getSession();
+        if (!session) {
           console.error("[App] Cannot search: User not authenticated");
           searchResults.value = [];
           return;
         }
 
-        const response = await musicDiscovery.search(userId, query.trim());
+        const response = await musicDiscovery.search(session, query.trim());
 
         if (response && response.error) {
           console.error("Search error:", response.error);

@@ -153,10 +153,11 @@ export const auth = {
 
 // MusicDiscovery API
 export const musicDiscovery = {
-  search: (user, query) =>
-    apiCall("/api/MusicDiscovery/search", { user, query }),
+  search: (session, query) =>
+    apiCall("/api/MusicDiscovery/search", { session, query }),
 
-  clearSearch: (user) => apiCall("/api/MusicDiscovery/clearSearch", { user }),
+  clearSearch: (session) =>
+    apiCall("/api/MusicDiscovery/clearSearch", { session }),
 
   getSearchResults: (user) =>
     apiCall("/api/MusicDiscovery/_getSearchResults", { user }),

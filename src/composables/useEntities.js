@@ -12,11 +12,14 @@ export function useEntities() {
   const loadEntityByExternalId = async (externalId) => {
     try {
       console.log(`[useEntities] Loading entity by externalId: ${externalId}`);
-      
+
       const entity = await musicDiscovery.getEntityFromId(externalId);
-      
+
       if (entity && entity.error) {
-        console.error(`[useEntities] Error loading entity ${externalId}:`, entity.error);
+        console.error(
+          `[useEntities] Error loading entity ${externalId}:`,
+          entity.error
+        );
         return { item: externalId, name: "Unknown", artist: "", uri: "" };
       }
 
@@ -40,7 +43,7 @@ export function useEntities() {
           externalId: musicEntity.externalId,
           externalURL: musicEntity.externalURL,
         });
-        
+
         return {
           item: externalId,
           name: musicEntity.name || "Unknown",
@@ -51,11 +54,29 @@ export function useEntities() {
         };
       }
 
-      console.warn(`[useEntities] No musicEntity found in response for ${externalId}:`, entity);
-      return { item: externalId, name: "Unknown", artist: "", uri: "", imageUrl: null };
+      console.warn(
+        `[useEntities] No musicEntity found in response for ${externalId}:`,
+        entity
+      );
+      return {
+        item: externalId,
+        name: "Unknown",
+        artist: "",
+        uri: "",
+        imageUrl: null,
+      };
     } catch (error) {
-      console.error(`[useEntities] Exception loading item ${externalId}:`, error);
-      return { item: externalId, name: "Unknown", artist: "", uri: "", imageUrl: null };
+      console.error(
+        `[useEntities] Exception loading item ${externalId}:`,
+        error
+      );
+      return {
+        item: externalId,
+        name: "Unknown",
+        artist: "",
+        uri: "",
+        imageUrl: null,
+      };
     }
   };
 
@@ -67,7 +88,7 @@ export function useEntities() {
   const loadEntityByUri = async (uri) => {
     try {
       const entity = await musicDiscovery.getEntityFromUri(uri);
-      
+
       if (entity && entity.error) {
         return null;
       }
@@ -94,4 +115,3 @@ export function useEntities() {
     loadEntityByUri,
   };
 }
-

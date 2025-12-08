@@ -74,7 +74,11 @@ export const playlist = {
     apiCall("/api/Playlist/addItem", { user, item, playlistName }),
 
   addItemToFriendPlaylist: (friendUserId, item, playlistName) =>
-    apiCall("/api/Playlist/addItem", { user: friendUserId, item, playlistName }),
+    apiCall("/api/Playlist/addItem", {
+      user: friendUserId,
+      item,
+      playlistName,
+    }),
 
   deleteItem: (user, item, playlistName) =>
     apiCall("/api/Playlist/deleteItem", { user, item, playlistName }),
@@ -152,10 +156,10 @@ export const musicDiscovery = {
 
 // User Profile API
 export const userProfile = {
-  updateBio: (user, bio) =>
-    apiCall("/api/Profile/updateBio", { user, bio }),
+  updateBio: (session, bio) =>
+    apiCall("/api/Profile/updateBio", { session, bio }),
 
-  updateThumbnail: async (user, thumbnailUrlOrFile) => {
+  updateThumbnail: async (session, thumbnailUrlOrFile) => {
     // If it's a File object, convert to data URL and send as JSON
     if (thumbnailUrlOrFile instanceof File) {
       // Convert file to base64 data URL
@@ -167,16 +171,19 @@ export const userProfile = {
       });
       // Send as JSON with thumbnailUrl field
       return apiCall("/api/Profile/updateThumbnail", {
-        user,
+        session,
         thumbnailUrl: dataUrl,
       });
     }
     // Otherwise, treat it as a URL string and use JSON
     return apiCall("/api/Profile/updateThumbnail", {
-      user,
+      session,
       thumbnailUrl: thumbnailUrlOrFile,
     });
   },
+
+  deleteProfile: (session) =>
+    apiCall("/api/Profile/deleteProfile", { session }),
 
   getBio: (user) => apiCall("/api/Profile/_getBio", { user }),
 

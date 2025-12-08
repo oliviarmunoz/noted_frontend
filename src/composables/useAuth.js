@@ -16,7 +16,7 @@ const initializeAuthState = () => {
   }
 }
 
-const { user, session: sessionData } = initializeAuthState()
+const { user, session: sessionData } = initializeAuthState();
 const currentUser = ref(user)
 const currentSession = ref(sessionData)
 

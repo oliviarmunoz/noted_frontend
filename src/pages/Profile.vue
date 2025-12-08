@@ -42,13 +42,24 @@
               <p v-else class="bio-text bio-empty">
                 No bio yet. Click edit to add one!
               </p>
-              <button
-                class="edit-bio-btn"
-                @click="startEditingBio"
-                title="Edit bio"
-              >
-                {{ bio ? "Edit" : "Add Bio" }}
-              </button>
+              <div class="bio-display-buttons">
+                <button
+                  class="edit-bio-btn"
+                  @click="startEditingBio"
+                  title="Edit bio"
+                >
+                  {{ bio ? "Edit" : "Add Bio" }}
+                </button>
+                <button
+                  v-if="bio"
+                  class="delete-bio-btn"
+                  @click="deleteBio"
+                  :disabled="savingBio"
+                  title="Delete bio"
+                >
+                  Delete
+                </button>
+              </div>
             </div>
             <div v-else-if="isEditingBio && isOwnProfile" class="bio-edit">
               <textarea
@@ -423,7 +434,10 @@
           <div v-if="loadingFriendRecommendations" class="loading-text">
             Loading friend recommendations...
           </div>
-          <div v-else-if="friendRecommendationsItems.length === 0" class="empty-message">
+          <div
+            v-else-if="friendRecommendationsItems.length === 0"
+            class="empty-message"
+          >
             No friend recommendations yet
           </div>
           <div v-else class="playlist-items-list">
@@ -533,7 +547,7 @@ export default {
   setup() {
     const router = useRouter();
     const route = useRoute();
-    const { currentUser } = useAuth();
+    const { currentUser, currentSession } = useAuth();
 
     // Get target username from route params
     const targetUsername = computed(() => {
@@ -715,7 +729,7 @@ export default {
       savingBio.value = true;
       try {
         const result = await userProfile.updateBio(
-          userId.value,
+          currentSession.value,
           bioEditText.value.trim()
         );
 
@@ -730,6 +744,31 @@ export default {
       } catch (error) {
         console.error("[Profile] Error saving bio:", error);
         showToastNotification(error.message || "Failed to save bio");
+      } finally {
+        savingBio.value = false;
+      }
+    };
+
+    // Delete bio
+    const deleteBio = async () => {
+      if (savingBio.value) return;
+
+      savingBio.value = true;
+      try {
+        const result = await userProfile.updateBio(currentSession.value, "");
+
+        if (result && result.error) {
+          showToastNotification(result.error || "Failed to delete bio");
+          return;
+        }
+
+        bio.value = "";
+        bioEditText.value = "";
+        isEditingBio.value = false;
+        showToastNotification("Bio deleted successfully!");
+      } catch (error) {
+        console.error("[Profile] Error deleting bio:", error);
+        showToastNotification(error.message || "Failed to delete bio");
       } finally {
         savingBio.value = false;
       }
@@ -767,8 +806,11 @@ export default {
           reader.readAsDataURL(file);
         });
 
-        // Send to backend (backend expects { user, thumbnailUrl: string })
-        const result = await userProfile.updateThumbnail(userId.value, dataUrl);
+        // Send to backend (backend expects { session, thumbnailUrl: string })
+        const result = await userProfile.updateThumbnail(
+          currentSession.value,
+          dataUrl
+        );
         console.log("[Profile] updateThumbnail response:", result);
 
         // Backend returns {} on success, so use the data URL we created
@@ -1213,83 +1255,86 @@ export default {
         if (friendRecommendationsResult && !friendRecommendationsResult.error) {
           // Load entity details for each item
           friendRecommendationsItems.value = await Promise.all(
-            (friendRecommendationsResult || []).slice(0, 20).map(async (itemObj) => {
-              const itemId = itemObj.item || itemObj;
-              try {
-                // Try as external ID first (playlist items are stored as externalId)
-                let entityResponse = await musicDiscovery.getEntityFromId(
-                  itemId
-                );
+            (friendRecommendationsResult || [])
+              .slice(0, 20)
+              .map(async (itemObj) => {
+                const itemId = itemObj.item || itemObj;
+                try {
+                  // Try as external ID first (playlist items are stored as externalId)
+                  let entityResponse = await musicDiscovery.getEntityFromId(
+                    itemId
+                  );
 
-                // Extract musicEntity from response
-                let musicEntity = null;
-                if (
-                  Array.isArray(entityResponse) &&
-                  entityResponse.length > 0
-                ) {
-                  musicEntity =
-                    entityResponse[0].musicEntity || entityResponse[0];
-                } else if (entityResponse?.musicEntity) {
-                  musicEntity = entityResponse.musicEntity;
-                } else if (entityResponse && !entityResponse.error) {
-                  musicEntity = entityResponse;
-                }
-
-                // If that didn't work, try as URI
-                if (!musicEntity || musicEntity.error) {
-                  try {
-                    entityResponse = await musicDiscovery.getEntityFromUri(
-                      itemId
-                    );
-                    if (
-                      Array.isArray(entityResponse) &&
-                      entityResponse.length > 0
-                    ) {
-                      musicEntity =
-                        entityResponse[0].musicEntity || entityResponse[0];
-                    } else if (entityResponse?.musicEntity) {
-                      musicEntity = entityResponse.musicEntity;
-                    } else if (entityResponse && !entityResponse.error) {
-                      musicEntity = entityResponse;
-                    }
-                  } catch (e) {
-                    console.warn(
-                      `[Profile] Could not load entity by URI for ${itemId}:`,
-                      e
-                    );
+                  // Extract musicEntity from response
+                  let musicEntity = null;
+                  if (
+                    Array.isArray(entityResponse) &&
+                    entityResponse.length > 0
+                  ) {
+                    musicEntity =
+                      entityResponse[0].musicEntity || entityResponse[0];
+                  } else if (entityResponse?.musicEntity) {
+                    musicEntity = entityResponse.musicEntity;
+                  } else if (entityResponse && !entityResponse.error) {
+                    musicEntity = entityResponse;
                   }
-                }
 
-                if (musicEntity && !musicEntity.error) {
+                  // If that didn't work, try as URI
+                  if (!musicEntity || musicEntity.error) {
+                    try {
+                      entityResponse = await musicDiscovery.getEntityFromUri(
+                        itemId
+                      );
+                      if (
+                        Array.isArray(entityResponse) &&
+                        entityResponse.length > 0
+                      ) {
+                        musicEntity =
+                          entityResponse[0].musicEntity || entityResponse[0];
+                      } else if (entityResponse?.musicEntity) {
+                        musicEntity = entityResponse.musicEntity;
+                      } else if (entityResponse && !entityResponse.error) {
+                        musicEntity = entityResponse;
+                      }
+                    } catch (e) {
+                      console.warn(
+                        `[Profile] Could not load entity by URI for ${itemId}:`,
+                        e
+                      );
+                    }
+                  }
+
+                  if (musicEntity && !musicEntity.error) {
+                    return {
+                      item: itemId,
+                      name: musicEntity.name || "Unknown",
+                      artist:
+                        musicEntity.artistName || musicEntity.artist || "",
+                      uri: musicEntity.uri || musicEntity.externalId || itemId,
+                      imageUrl: musicEntity.imageUrl || null,
+                    };
+                  }
                   return {
                     item: itemId,
-                    name: musicEntity.name || "Unknown",
-                    artist: musicEntity.artistName || musicEntity.artist || "",
-                    uri: musicEntity.uri || musicEntity.externalId || itemId,
-                    imageUrl: musicEntity.imageUrl || null,
+                    name: "Unknown",
+                    artist: "",
+                    uri: itemId,
+                    imageUrl: null,
+                  };
+                } catch (err) {
+                  console.warn(
+                    `[Profile] Error loading entity for friend recommendation ${itemId}:`,
+                    err
+                  );
+                  return {
+                    item: itemId,
+                    name: "Unknown",
+                    artist: "",
+                    uri: itemId,
+                    imageUrl: null,
                   };
                 }
-                return {
-                  item: itemId,
-                  name: "Unknown",
-                  artist: "",
-                  uri: itemId,
-                  imageUrl: null,
-                };
-              } catch (err) {
-                console.warn(
-                  `[Profile] Error loading entity for friend recommendation ${itemId}:`,
-                  err
-                );
-                return {
-                  item: itemId,
-                  name: "Unknown",
-                  artist: "",
-                  uri: itemId,
-                  imageUrl: null,
-                };
-              }
-            })
+              })
           );
         } else {
           friendRecommendationsItems.value = [];
@@ -1990,6 +2035,7 @@ export default {
       startEditingBio,
       cancelEditingBio,
       saveBio,
+      deleteBio,
     };
   },
 };
@@ -2110,6 +2156,13 @@ export default {
   opacity: 0.7;
 }
 
+.bio-display-buttons {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+  align-items: center;
+}
+
 .edit-bio-btn {
   padding: 0.5rem 1rem;
   background: rgba(74, 158, 255, 0.2);
@@ -2121,7 +2174,6 @@ export default {
   cursor: pointer;
   transition: all 0.2s ease;
   white-space: nowrap;
-  flex-shrink: 0;
 }
 
 .edit-bio-btn:hover {
@@ -2175,7 +2227,8 @@ export default {
 }
 
 .save-bio-btn,
-.cancel-bio-btn {
+.cancel-bio-btn,
+.delete-bio-btn {
   padding: 0.5rem 1rem;
   border-radius: 4px;
   font-size: 0.9rem;
@@ -2196,6 +2249,17 @@ export default {
   border-color: rgba(74, 158, 255, 0.5);
 }
 
+.delete-bio-btn {
+  background: rgba(255, 107, 107, 0.2);
+  border: 1px solid rgba(255, 107, 107, 0.3);
+  color: #ff6b6b;
+}
+
+.delete-bio-btn:hover:not(:disabled) {
+  background: rgba(255, 107, 107, 0.3);
+  border-color: rgba(255, 107, 107, 0.5);
+}
+
 .cancel-bio-btn {
   background: rgba(123, 140, 168, 0.2);
   border: 1px solid rgba(123, 140, 168, 0.3);
@@ -2208,7 +2272,8 @@ export default {
 }
 
 .save-bio-btn:disabled,
-.cancel-bio-btn:disabled {
+.cancel-bio-btn:disabled,
+.delete-bio-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

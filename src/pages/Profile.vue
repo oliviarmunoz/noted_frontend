@@ -5,12 +5,13 @@
       <div class="profile-header">
         <div class="user-avatar">
           <img
-            v-if="thumbnailUrl"
+            v-if="thumbnailUrl && !thumbnailError"
             :src="thumbnailUrl"
             alt="Profile picture"
             class="avatar-image"
+            @error="handleThumbnailError"
           />
-          <span v-else class="avatar-icon">👤</span>
+          <span v-else-if="!thumbnailError" class="avatar-icon">👤</span>
           <!-- Upload button (only for own profile) -->
           <input
             v-if="isOwnProfile"
@@ -23,12 +24,50 @@
           <button
             v-if="isOwnProfile"
             class="upload-avatar-btn"
-            @click="triggerFileInput"
-            :disabled="uploadingThumbnail"
+            @click="showThumbnailModal = true"
+            :disabled="uploadingThumbnail || removingThumbnail"
             title="Upload profile picture"
           >
             {{ uploadingThumbnail ? "..." : "+" }}
           </button>
+        </div>
+        <div v-if="thumbnailError" class="error-text">
+          {{ thumbnailError }}
+        </div>
+
+        <!-- Thumbnail Options Modal -->
+        <div
+          v-if="isOwnProfile && showThumbnailModal"
+          class="modal-overlay"
+          @click="showThumbnailModal = false"
+        >
+          <div class="modal-content modal-content-thumbnail" @click.stop>
+            <div class="modal-header">
+              <h3>Profile Picture</h3>
+              <button class="modal-close" @click="showThumbnailModal = false">
+                ×
+              </button>
+            </div>
+            <div class="modal-body">
+              <button
+                class="modal-action-btn"
+                @click="handleChangeThumbnail"
+                :disabled="uploadingThumbnail || removingThumbnail"
+              >
+                {{
+                  thumbnailUrl && !thumbnailError ? "Change Existing" : "Upload"
+                }}
+              </button>
+              <button
+                v-if="thumbnailUrl && !thumbnailError"
+                class="modal-action-btn modal-action-btn-delete"
+                @click="handleDeleteThumbnail"
+                :disabled="uploadingThumbnail || removingThumbnail"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
         </div>
         <div class="user-info">
           <h1 class="username">{{ username || "Loading..." }}</h1>
@@ -716,7 +755,10 @@ export default {
     // Profile picture state
     const thumbnailUrl = ref(null);
     const uploadingThumbnail = ref(false);
+    const removingThumbnail = ref(false);
+    const thumbnailError = ref(null);
     const fileInput = ref(null);
+    const showThumbnailModal = ref(false);
 
     // Bio state
     const bio = ref("");
@@ -744,6 +786,7 @@ export default {
     const loadThumbnail = async () => {
       if (!userId.value) {
         thumbnailUrl.value = null;
+        thumbnailError.value = null;
         return;
       }
       try {
@@ -752,9 +795,48 @@ export default {
           Array.isArray(result) && result.length > 0 ? result[0] : result;
         thumbnailUrl.value =
           thumbnailData?.thumbnailUrl || thumbnailData?.thumbnail || null;
+        thumbnailError.value = null;
       } catch (error) {
         console.error("[Profile] Error loading thumbnail:", error);
         thumbnailUrl.value = null;
+        thumbnailError.value = null;
+      }
+    };
+
+    // Handle thumbnail image load error
+    const handleThumbnailError = () => {
+      thumbnailError.value =
+        "Failed to load profile picture. Image may be too large or corrupted.";
+      thumbnailUrl.value = null;
+    };
+
+    // Remove thumbnail
+    const handleRemoveThumbnail = async () => {
+      if (removingThumbnail.value) return;
+
+      removingThumbnail.value = true;
+      thumbnailError.value = null;
+      try {
+        const result = await userProfile.updateThumbnail(
+          currentSession.value,
+          ""
+        );
+
+        if (result && result.error) {
+          thumbnailError.value =
+            result.error || "Failed to remove profile picture";
+          return;
+        }
+
+        thumbnailUrl.value = null;
+        thumbnailError.value = null;
+        showToastNotification("Profile picture removed!");
+      } catch (error) {
+        console.error("[Profile] Error removing thumbnail:", error);
+        thumbnailError.value =
+          error.message || "Failed to remove profile picture";
+      } finally {
+        removingThumbnail.value = false;
       }
     };
 
@@ -844,6 +926,18 @@ export default {
       fileInput.value?.click();
     };
 
+    // Handle change thumbnail from modal
+    const handleChangeThumbnail = () => {
+      showThumbnailModal.value = false;
+      triggerFileInput();
+    };
+
+    // Handle delete thumbnail from modal
+    const handleDeleteThumbnail = async () => {
+      showThumbnailModal.value = false;
+      await handleRemoveThumbnail();
+    };
+
     // Handle file selection and upload
     const handleFileSelect = async (event) => {
       const file = event.target.files?.[0];
@@ -862,6 +956,7 @@ export default {
       }
 
       uploadingThumbnail.value = true;
+      thumbnailError.value = null;
       try {
         // Convert file to data URL first so we can use it immediately
         const dataUrl = await new Promise((resolve, reject) => {
@@ -881,6 +976,7 @@ export default {
         // Backend returns {} on success, so use the data URL we created
         if (!result || !result.error) {
           thumbnailUrl.value = dataUrl;
+          thumbnailError.value = null;
           showToastNotification("Profile picture updated!");
         } else {
           throw new Error(result.error || "Failed to update thumbnail");
@@ -891,6 +987,8 @@ export default {
           message: error.message,
           stack: error.stack,
         });
+        thumbnailError.value =
+          error.message || "Failed to upload picture. Please try again.";
         showToastNotification(
           error.message || "Failed to upload picture. Please try again."
         );
@@ -2141,9 +2239,16 @@ export default {
       friendToRemove,
       thumbnailUrl,
       uploadingThumbnail,
+      removingThumbnail,
+      thumbnailError,
       fileInput,
+      showThumbnailModal,
       handleFileSelect,
       triggerFileInput,
+      handleThumbnailError,
+      handleRemoveThumbnail,
+      handleChangeThumbnail,
+      handleDeleteThumbnail,
       bio,
       isEditingBio,
       bioEditText,
@@ -2235,6 +2340,49 @@ export default {
 
 .upload-avatar-btn:disabled {
   opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.modal-content-thumbnail {
+  max-width: 400px;
+}
+
+.modal-action-btn {
+  width: 100%;
+  padding: 0.75rem 1.5rem;
+  margin-bottom: 0.75rem;
+  background: rgba(74, 158, 255, 0.2);
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  border-radius: 4px;
+  color: #4a9eff;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.modal-action-btn:hover:not(:disabled) {
+  background: rgba(74, 158, 255, 0.3);
+  border-color: rgba(74, 158, 255, 0.5);
+}
+
+.modal-action-btn:last-child {
+  margin-bottom: 0;
+}
+
+.modal-action-btn-delete {
+  background: rgba(255, 107, 107, 0.2);
+  border: 1px solid rgba(255, 107, 107, 0.3);
+  color: #ff6b6b;
+}
+
+.modal-action-btn-delete:hover:not(:disabled) {
+  background: rgba(255, 107, 107, 0.3);
+  border-color: rgba(255, 107, 107, 0.5);
+}
+
+.modal-action-btn:disabled {
+  opacity: 0.5;
   cursor: not-allowed;
 }
 

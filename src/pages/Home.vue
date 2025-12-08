@@ -15,7 +15,7 @@
           </div>
           <ul v-else class="song-list">
             <li
-              v-for="item in listenLaterItems"
+              v-for="item in listenLaterItems.slice(0, 3)"
               :key="item.item"
               class="song-item"
             >
@@ -45,6 +45,14 @@
             <li v-if="listenLaterItems.length === 0" class="empty-message">
               Search songs to add to Listen Later
             </li>
+            <li v-if="listenLaterItems.length > 3" class="view-all-item">
+              <button
+                class="view-all-btn"
+                @click="$router.push('/playlists#listen-later')"
+              >
+                View All
+              </button>
+            </li>
           </ul>
         </div>
 
@@ -61,7 +69,7 @@
           </div>
           <ul v-else class="song-list">
             <li
-              v-for="item in favoritesItems"
+              v-for="item in favoritesItems.slice(0, 3)"
               :key="item.item"
               class="song-item"
             >
@@ -91,6 +99,14 @@
             <li v-if="favoritesItems.length === 0" class="empty-message">
               Search songs to add to Favorites
             </li>
+            <li v-if="favoritesItems.length > 3" class="view-all-item">
+              <button
+                class="view-all-btn"
+                @click="$router.push('/playlists')"
+              >
+                View All
+              </button>
+            </li>
           </ul>
         </div>
 
@@ -109,7 +125,7 @@
           </div>
           <ul v-else class="song-list">
             <li
-              v-for="item in friendRecommendationsItems"
+              v-for="item in friendRecommendationsItems.slice(0, 3)"
               :key="item.item"
               class="song-item"
             >
@@ -141,6 +157,14 @@
               class="empty-message"
             >
               No friend recommendations yet
+            </li>
+            <li v-if="friendRecommendationsItems.length > 3" class="view-all-item">
+              <button
+                class="view-all-btn"
+                @click="$router.push('/playlists#friend-recommendations')"
+              >
+                View All
+              </button>
             </li>
           </ul>
         </div>
@@ -1642,6 +1666,33 @@ export default {
   list-style: none;
   word-wrap: break-word;
   overflow-wrap: break-word;
+}
+
+.view-all-item {
+  list-style: none;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(123, 140, 168, 0.1);
+}
+
+.view-all-btn {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: rgba(74, 158, 255, 0.1);
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  border-radius: 6px;
+  color: #4a9eff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+}
+
+.view-all-btn:hover {
+  background: rgba(74, 158, 255, 0.2);
+  border-color: rgba(74, 158, 255, 0.5);
+  transform: translateY(-1px);
 }
 
 /* Feed */

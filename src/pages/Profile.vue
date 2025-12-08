@@ -428,6 +428,14 @@
                 </div>
                 <div class="playlist-item-artist">{{ item.artist || "" }}</div>
               </div>
+              <button
+                v-if="isOwnProfile"
+                class="remove-item-btn"
+                @click.stop="removeFromPlaylist(item, 'Favorites')"
+                title="Remove from Favorites"
+              >
+                ×
+              </button>
             </div>
           </div>
         </section>
@@ -462,6 +470,14 @@
                 </div>
                 <div class="playlist-item-artist">{{ item.artist || "" }}</div>
               </div>
+              <button
+                v-if="isOwnProfile"
+                class="remove-item-btn"
+                @click.stop="removeFromPlaylist(item, 'Listen Later')"
+                title="Remove from Listen Later"
+              >
+                ×
+              </button>
             </div>
           </div>
         </section>
@@ -499,6 +515,14 @@
                 </div>
                 <div class="playlist-item-artist">{{ item.artist || "" }}</div>
               </div>
+              <button
+                v-if="isOwnProfile"
+                class="remove-item-btn"
+                @click.stop="removeFromPlaylist(item, 'Friend Recommendations')"
+                title="Remove from Friend Recommendations"
+              >
+                ×
+              </button>
             </div>
           </div>
         </section>
@@ -713,7 +737,7 @@ export default {
     const showRemoveFriendModal = ref(false);
     const friendToRemove = ref(null);
 
-    const { getPlaylistCount } = usePlaylists();
+    const { getPlaylistCount, removeItemFromPlaylist } = usePlaylists();
     const { showToastNotification } = useToast();
 
     // Load profile thumbnail
@@ -1881,6 +1905,43 @@ export default {
       router.push(`/review/${encodedUri}`);
     };
 
+    // Remove item from playlist
+    const removeFromPlaylist = async (item, playlistName) => {
+      if (!isOwnProfile.value) {
+        return;
+      }
+
+      if (!item.item) {
+        showToastNotification("Error: Item ID not found");
+        return;
+      }
+
+      try {
+        const result = await removeItemFromPlaylist(item.item, playlistName);
+
+        if (!result.success) {
+          showToastNotification(
+            result.error || `Error removing from ${playlistName}`
+          );
+          return;
+        }
+
+        showToastNotification(`Removed from ${playlistName}`);
+
+        // Reload the playlist
+        if (playlistName === "Favorites") {
+          await loadPlaylistItems();
+        } else if (playlistName === "Listen Later") {
+          await loadPlaylistItems();
+        } else if (playlistName === "Friend Recommendations") {
+          await loadPlaylistItems();
+        }
+      } catch (error) {
+        console.error(`[Profile] Error removing from ${playlistName}:`, error);
+        showToastNotification(`Error removing from ${playlistName}`);
+      }
+    };
+
     // Delete review
     const handleDeleteReview = async (reviewItem) => {
       if (!reviewItem.review) {
@@ -2068,6 +2129,7 @@ export default {
       navigateToReview,
       navigateToUserProfile,
       handleDeleteReview,
+      removeFromPlaylist,
       searchUser,
       handleSendFriendRequest,
       handleAcceptRequest,
@@ -3188,6 +3250,33 @@ export default {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.remove-item-btn {
+  background: rgba(255, 107, 107, 0.2);
+  border: 1px solid rgba(255, 107, 107, 0.3);
+  border-radius: 4px;
+  color: #ff6b6b;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 2rem;
+  min-width: 2rem;
+  max-width: 2rem;
+  padding: 0.5rem 0;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.remove-item-btn:hover {
+  background: rgba(255, 107, 107, 0.3);
+  border-color: rgba(255, 107, 107, 0.5);
 }
 
 @media (max-width: 768px) {

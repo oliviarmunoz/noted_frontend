@@ -1288,37 +1288,82 @@ export default {
         return;
       }
 
+      if (!currentSession.value) {
+        showToastNotification("Error: No active session");
+        return;
+      }
+
       const itemIdToUse = songInfo.value?.externalId || itemId.value;
-      recommendingToFriend.value = friend.friend;
+      const friendId = friend.friend;
+      recommendingToFriend.value = friendId;
+
+      console.log("[Review] Recommending to friend:", {
+        session: currentSession.value,
+        friend: friendId,
+        item: itemIdToUse,
+        playlistName: "Friend Recommendations",
+        friendObject: friend,
+      });
 
       try {
-        // Use addItem with targetUser parameter to add to friend's playlist
-        const result = await playlist.addItem(
+        // Use addItemToFriendPlaylist to add to friend's playlist
+        const result = await playlist.addItemToFriendPlaylist(
           currentSession.value,
+          friendId,
           itemIdToUse,
-          "Friend Recommendations",
-          friend.friend
+          "Friend Recommendations"
         );
 
+        // Close modal immediately so user can see the toast message
+        showFriendRecommendModal.value = false;
+        friendSearchQuery.value = "";
+        recommendingToFriend.value = null;
+
         if (result && result.error) {
-          showToastNotification(
-            result.error || "Failed to recommend song to friend"
-          );
+          // Enhance error message to be more user-friendly
+          let errorMessage = result.error || "Failed to recommend song to friend";
+          
+          // Replace item ID with song name
+          if (errorMessage.includes("already in playlist") && songInfo.value?.name) {
+            // Replace the item ID with the song name in the error message
+            // Handles formats like: Item 'ID' or Item "ID" or just the ID
+            errorMessage = errorMessage.replace(
+              /Item\s+['"]?[^'"]+['"]?/,
+              `"${songInfo.value.name}"`
+            );
+          }
+          
+          // Replace user ID with friend's name
+          if (friend.friendName && errorMessage.includes(friend.friend)) {
+            // Replace "for user 'ID'" with "for [friend's name]"
+            errorMessage = errorMessage.replace(
+              new RegExp(`for\\s+user\\s+['"]?${friend.friend}['"]?`, 'i'),
+              `for ${friend.friendName}`
+            );
+            // Also handle cases where user ID appears without "for user" prefix
+            errorMessage = errorMessage.replace(
+              new RegExp(`['"]?${friend.friend}['"]?`, 'g'),
+              friend.friendName
+            );
+          }
+          
+          showToastNotification(errorMessage);
           return;
         }
 
         showToastNotification(
           `Recommended "${songInfo.value.name}" to ${friend.friendName || friend.friend}!`
         );
+      } catch (err) {
+        // Close modal immediately even on error
         showFriendRecommendModal.value = false;
         friendSearchQuery.value = "";
-      } catch (err) {
+        recommendingToFriend.value = null;
+        
         console.error("[Review] Error recommending to friend:", err);
         showToastNotification(
           err.message || "Failed to recommend song to friend"
         );
-      } finally {
-        recommendingToFriend.value = null;
       }
     };
 

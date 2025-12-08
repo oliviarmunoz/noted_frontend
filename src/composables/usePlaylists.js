@@ -120,7 +120,6 @@ export function usePlaylists() {
       if (!session) {
         return { success: false, error: 'No session found in localStorage' };
       }
-
       const result = await playlist.deleteItem(session, itemId, playlistName);
       
       if (result && result.error) {

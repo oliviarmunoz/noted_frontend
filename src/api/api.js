@@ -77,12 +77,18 @@ export const playlist = {
   addItem: (session, item, playlistName) =>
     apiCall("/api/Playlist/addItem", { session, item, playlistName }),
 
-  addItemToFriendPlaylist: (friendUserId, item, playlistName) =>
-    apiCall("/api/Playlist/addItem", {
-      user: friendUserId,
+  addItemToFriendPlaylist: (session, friend, item, playlistName) => {
+    // Validate friend parameter
+    if (!friend) {
+      throw new Error("Friend ID is required");
+    }
+    return apiCall("/api/Playlist/addItemToFriend", {
+      session,
+      friend,
       item,
       playlistName,
-    }),
+    });
+  },
 
   deleteItem: (session, item, playlistName) =>
     apiCall("/api/Playlist/deleteItem", { session, item, playlistName }),

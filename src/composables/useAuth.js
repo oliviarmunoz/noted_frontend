@@ -35,6 +35,21 @@ export function getUserId() {
   }
 }
 
+/**
+ * Safely get session from localStorage
+ * @returns {string|null} The session ID or null if not found/invalid
+ */
+export function getSession() {
+  try {
+    const stored = localStorage.getItem('currentSession');
+    if (!stored || stored === 'undefined') return null;
+    return JSON.parse(stored);
+  } catch (error) {
+    console.error('[getSession] Error parsing currentSession:', error);
+    return null;
+  }
+}
+
 export function useAuth() {
   const router = useRouter()
 

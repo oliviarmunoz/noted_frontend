@@ -404,7 +404,7 @@ export default {
   setup() {
     const route = useRoute();
     const router = useRouter();
-    const { currentUser } = useAuth();
+    const { currentUser, currentSession } = useAuth();
 
     // State management
     const loading = ref(true);
@@ -1278,7 +1278,7 @@ export default {
 
     // Recommend song to friend
     const handleRecommendToFriend = async (friend) => {
-      if (!userId.value || !friend || !friend.friend) {
+      if (!friend || !friend.friend) {
         showToastNotification("Error: Invalid friend selection");
         return;
       }
@@ -1292,10 +1292,12 @@ export default {
       recommendingToFriend.value = friend.friend;
 
       try {
-        const result = await playlist.addItemToFriendPlaylist(
-          friend.friend,
+        // Use addItem with targetUser parameter to add to friend's playlist
+        const result = await playlist.addItem(
+          currentSession.value,
           itemIdToUse,
-          "Friend Recommendations"
+          "Friend Recommendations",
+          friend.friend
         );
 
         if (result && result.error) {

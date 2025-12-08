@@ -1059,9 +1059,13 @@ export default {
     // Load playlist counts (lightweight - no entity details)
     const loadPlaylistCounts = async () => {
       try {
-        if (!userId.value) return;
+        // Only load counts for own profile (requires session)
+        if (!isOwnProfile.value || !currentSession.value) {
+          favoritesCount.value = 0;
+          listenLaterCount.value = 0;
+          return;
+        }
 
-        // Use direct API call to support viewing other users' playlists
         const favoritesResult = await playlist.getPlaylistItems(
           userId.value,
           "Favorites"

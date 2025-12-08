@@ -1,7 +1,7 @@
 import { ref } from "vue";
 import { playlist } from "../api/api.js";
 import { useEntities } from "./useEntities.js";
-import { getUserId } from "./useAuth.js";
+import { getSession, getUserId } from "./useAuth.js";
 
 /**
  * Composable for playlist management
@@ -13,18 +13,19 @@ export function usePlaylists() {
    * Add an item to a playlist
    * @param {string} itemId - The externalId (Spotify ID) of the item to add
    * @param {string} playlistName - Name of the playlist
+   * @param {string|null} targetUser - Optional target user ID for adding to friend's playlist
    * @returns {Promise<{success: boolean, error?: string}>}
    */
-  const addItemToPlaylist = async (itemId, playlistName) => {
+  const addItemToPlaylist = async (itemId, playlistName, targetUser = null) => {
     try {
-      const userId = getUserId();
-      if (!userId) {
-        return { success: false, error: 'No userId found in localStorage' };
+      const session = getSession();
+      if (!session) {
+        return { success: false, error: 'No session found in localStorage' };
       }
 
       // Add item to playlist using externalId
       // Note: Backend creates playlists automatically, so we don't need to create them here
-      const addResult = await playlist.addItem(userId, itemId, playlistName);
+      const addResult = await playlist.addItem(session, itemId, playlistName, targetUser);
 
       if (addResult && addResult.error) {
         return { success: false, error: addResult.error };
@@ -115,12 +116,12 @@ export function usePlaylists() {
    */
   const removeItemFromPlaylist = async (itemId, playlistName) => {
     try {
-      const userId = getUserId();
-      if (!userId) {
-        return { success: false, error: 'No userId found in localStorage' };
+      const session = getSession();
+      if (!session) {
+        return { success: false, error: 'No session found in localStorage' };
       }
 
-      const result = await playlist.deleteItem(userId, itemId, playlistName);
+      const result = await playlist.deleteItem(session, itemId, playlistName);
       
       if (result && result.error) {
         return { success: false, error: result.error };

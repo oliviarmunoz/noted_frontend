@@ -68,14 +68,14 @@ export const friending = {
 
 // Playlist API
 export const playlist = {
-  createPlaylist: (user, playlistName) =>
-    apiCall("/api/Playlist/createPlaylist", { user, playlistName }),
+  createPlaylist: (session, playlistName) =>
+    apiCall("/api/Playlist/createPlaylist", { session, playlistName }),
 
-  deletePlaylist: (user, playlistName) =>
-    apiCall("/api/Playlist/deletePlaylist", { user, playlistName }),
+  deletePlaylist: (session, playlistName) =>
+    apiCall("/api/Playlist/deletePlaylist", { session, playlistName }),
 
-  addItem: (user, item, playlistName) =>
-    apiCall("/api/Playlist/addItem", { user, item, playlistName }),
+  addItem: (session, item, playlistName) =>
+    apiCall("/api/Playlist/addItem", { session, item, playlistName }),
 
   addItemToFriendPlaylist: (friendUserId, item, playlistName) =>
     apiCall("/api/Playlist/addItem", {
@@ -84,8 +84,8 @@ export const playlist = {
       playlistName,
     }),
 
-  deleteItem: (user, item, playlistName) =>
-    apiCall("/api/Playlist/deleteItem", { user, item, playlistName }),
+  deleteItem: (session, item, playlistName) =>
+    apiCall("/api/Playlist/deleteItem", { session, item, playlistName }),
 
   getPlaylistItems: (user, playlistName) =>
     apiCall("/api/Playlist/_getPlaylistItems", { user, playlistName }),

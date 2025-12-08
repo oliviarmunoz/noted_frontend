@@ -101,7 +101,9 @@
           >
             FRIEND RECOMMENDATIONS
           </h2>
-          <div v-if="loadingFriendRecommendations" class="loading-text">Loading...</div>
+          <div v-if="loadingFriendRecommendations" class="loading-text">
+            Loading...
+          </div>
           <div v-else-if="friendRecommendationsError" class="error-text">
             {{ friendRecommendationsError }}
           </div>
@@ -134,7 +136,10 @@
                 ×
               </button>
             </li>
-            <li v-if="friendRecommendationsItems.length === 0" class="empty-message">
+            <li
+              v-if="friendRecommendationsItems.length === 0"
+              class="empty-message"
+            >
               No friend recommendations yet
             </li>
           </ul>
@@ -337,7 +342,7 @@ export default {
   name: "Home",
   setup() {
     const router = useRouter();
-    const { currentUser } = useAuth();
+    const { currentUser, currentSession } = useAuth();
 
     // Get userId from authenticated user
     const userId = ref(null);
@@ -925,7 +930,8 @@ export default {
         }
       } catch (error) {
         console.error("[Home] Error loading friend recommendations:", error);
-        friendRecommendationsError.value = error.message || "Failed to load friend recommendations";
+        friendRecommendationsError.value =
+          error.message || "Failed to load friend recommendations";
         friendRecommendationsItems.value = [];
       } finally {
         loadingFriendRecommendations.value = false;
@@ -989,6 +995,9 @@ export default {
       }
     };
 
+    // Expose currentSession for use in methods
+    const getCurrentSession = () => currentSession.value;
+
     return {
       favoritesItems,
       listenLaterItems,
@@ -1003,6 +1012,7 @@ export default {
       navigateFromFeed,
       removeFromPlaylist,
       getUserId,
+      getCurrentSession,
       userId: computed(() => userId.value),
       showToastNotification,
       navigateToUserProfile,
@@ -1344,7 +1354,8 @@ export default {
       }
 
       const currentUser = this.getUserId();
-      if (!currentUser) {
+      const currentSession = this.getCurrentSession();
+      if (!currentUser || !currentSession) {
         this.showToastNotification("Error: User not authenticated");
         return;
       }
@@ -1367,8 +1378,8 @@ export default {
       try {
         // Add comment to review
         const result = await review.addComment(
+          currentSession,
           reviewId,
-          currentUser,
           commentText.trim()
         );
         console.log("addComment result:", result);
@@ -1410,14 +1421,19 @@ export default {
     },
     async handleDeleteComment(reviewId, commentId) {
       const currentUser = this.getUserId();
-      if (!currentUser) {
+      const currentSession = this.getCurrentSession();
+      if (!currentUser || !currentSession) {
         this.showToastNotification("Error: User not authenticated");
         return;
       }
 
       try {
         // Delete comment
-        const result = await review.deleteComment(reviewId, commentId);
+        const result = await review.deleteComment(
+          currentSession,
+          reviewId,
+          commentId
+        );
 
         if (result && result.error) {
           this.showToastNotification(result.error);

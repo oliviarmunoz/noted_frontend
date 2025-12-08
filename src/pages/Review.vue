@@ -197,6 +197,13 @@
             :class="{ 'newly-added': newlyAddedReviewId === review.id }"
           >
             <div class="activity-header">
+              <img
+                v-if="review.reviewerThumbnail"
+                :src="review.reviewerThumbnail"
+                :alt="review.username || review.userId"
+                class="reviewer-avatar-small"
+              />
+              <span v-else class="reviewer-icon-small">👤</span>
               <span
                 class="activity-text clickable-username"
                 @click="navigateToUserProfile(review.userId)"
@@ -230,7 +237,21 @@
                 v-for="comment in review.comments"
                 :key="comment.commentId"
               >
-                <span class="comment-user"
+                <img
+                  v-if="comment.commenterThumbnail"
+                  :src="comment.commenterThumbnail"
+                  :alt="comment.commenterUsername || comment.commenter"
+                  class="comment-avatar-small"
+                />
+                <span v-else class="comment-icon-small">👤</span>
+                <span
+                  class="comment-user clickable-username"
+                  @click="navigateToUserProfile(comment.commenter)"
+                  v-if="comment.commenter"
+                >
+                  {{ comment.commenterUsername || comment.commenter }}:
+                </span>
+                <span class="comment-user" v-else
                   >{{ comment.commenterUsername || comment.commenter }}:</span
                 >
                 <span class="comment-text">{{
@@ -290,7 +311,10 @@
         >
           <div class="modal-content">
             <h3 class="modal-title">Recommend to Friend</h3>
-            <button class="modal-close" @click="showFriendRecommendModal = false">
+            <button
+              class="modal-close"
+              @click="showFriendRecommendModal = false"
+            >
               ×
             </button>
             <div class="friend-recommend-content">
@@ -337,7 +361,11 @@
                       @click.stop="handleRecommendToFriend(friend)"
                       :disabled="recommendingToFriend === friend.friend"
                     >
-                      {{ recommendingToFriend === friend.friend ? "..." : "Recommend" }}
+                      {{
+                        recommendingToFriend === friend.friend
+                          ? "..."
+                          : "Recommend"
+                      }}
                     </button>
                   </div>
                 </div>
@@ -393,7 +421,14 @@
 <script>
 import { ref, computed, watch, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { review, musicDiscovery, auth, playlist, friending, userProfile } from "../api/api.js";
+import {
+  review,
+  musicDiscovery,
+  auth,
+  playlist,
+  friending,
+  userProfile,
+} from "../api/api.js";
 import { usePlaylists } from "../composables/usePlaylists.js";
 import { useToast } from "../composables/useToast.js";
 import { usePlaylistEvents } from "../composables/usePlaylistEvents.js";
@@ -549,18 +584,38 @@ export default {
       }
     };
 
-    // Helper function to fetch usernames for comments
+    // Helper function to load thumbnail for a user
+    const loadUserThumbnail = async (userId) => {
+      if (!userId) return null;
+      try {
+        const result = await userProfile.getThumbnail(userId);
+        const thumbnailData =
+          Array.isArray(result) && result.length > 0 ? result[0] : result;
+        return thumbnailData?.thumbnailUrl || thumbnailData?.thumbnail || null;
+      } catch (error) {
+        console.warn(
+          `[Review] Error loading thumbnail for user ${userId}:`,
+          error
+        );
+        return null;
+      }
+    };
+
+    // Helper function to fetch usernames and thumbnails for comments
     const enrichCommentsWithUsernames = async (comments) => {
       if (!comments || comments.length === 0) return [];
 
       return await Promise.all(
         comments.map(async (comment) => {
           let commenterUsername = comment.commenter;
+          let commenterThumbnail = null;
           if (comment.commenter) {
             try {
-              const usernameResponse = await auth.getUsername(
-                comment.commenter
-              );
+              // Load username and thumbnail in parallel
+              const [usernameResponse, thumbnail] = await Promise.all([
+                auth.getUsername(comment.commenter),
+                loadUserThumbnail(comment.commenter),
+              ]);
               // _getUsername returns an array: [{ username: "String" }]
               if (usernameResponse && !usernameResponse.error) {
                 if (
@@ -573,9 +628,10 @@ export default {
                   commenterUsername = usernameResponse.username;
                 }
               }
+              commenterThumbnail = thumbnail;
             } catch (err) {
               console.warn(
-                `Could not get username for commenter ${comment.commenter}:`,
+                `Could not get username/thumbnail for commenter ${comment.commenter}:`,
                 err
               );
               // Keep the userId as fallback
@@ -585,6 +641,7 @@ export default {
           return {
             ...comment,
             commenterUsername: commenterUsername,
+            commenterThumbnail: commenterThumbnail,
             notes: comment.comment || comment.notes, // Support both 'comment' and 'notes' fields
           };
         })
@@ -621,11 +678,16 @@ export default {
 
             const reviewUserId = r.user || r.author;
 
-            // Get username for the reviewer using _getUsername API
+            // Get username and thumbnail for the reviewer using APIs
             let username = reviewUserId;
+            let reviewerThumbnail = null;
             if (reviewUserId) {
               try {
-                const usernameResponse = await auth.getUsername(reviewUserId);
+                // Load username and thumbnail in parallel
+                const [usernameResponse, thumbnail] = await Promise.all([
+                  auth.getUsername(reviewUserId),
+                  loadUserThumbnail(reviewUserId),
+                ]);
                 if (usernameResponse && !usernameResponse.error) {
                   if (
                     Array.isArray(usernameResponse) &&
@@ -636,9 +698,10 @@ export default {
                     username = usernameResponse.username;
                   }
                 }
+                reviewerThumbnail = thumbnail;
               } catch (err) {
                 console.warn(
-                  `Could not get username for user ${reviewUserId}:`,
+                  `Could not get username/thumbnail for user ${reviewUserId}:`,
                   err
                 );
                 // Keep the userId as fallback
@@ -669,6 +732,7 @@ export default {
               id: reviewId,
               userId: reviewUserId,
               username: username,
+              reviewerThumbnail: reviewerThumbnail,
               rating: r.rating,
               notes: r.notes || r.text,
               comments: comments,
@@ -762,6 +826,7 @@ export default {
 
           // Update existing review
           const result = await review.updateReview(
+            currentSession.value,
             reviewId,
             parseInt(myRating.value),
             myNotes.value
@@ -776,8 +841,8 @@ export default {
         } else {
           // Create new review
           const result = await review.postReview(
+            currentSession.value,
             itemId.value,
-            userId.value,
             parseInt(myRating.value),
             myNotes.value
           );
@@ -789,6 +854,9 @@ export default {
 
           newReviewId = result?.review || null;
           showToastNotification("Review submitted successfully!");
+
+          // Reload the user's review so the button changes to "Update Review"
+          await loadMyReview();
         }
 
         // reload all reviews
@@ -863,7 +931,10 @@ export default {
         }
 
         // Delete review
-        const result = await review.deleteReview(reviewId);
+        const result = await review.deleteReview(
+          currentSession.value,
+          reviewId
+        );
 
         if (result && result.error) {
           reviewError.value = result.error;
@@ -898,8 +969,8 @@ export default {
       try {
         // Add comment to review
         const result = await review.addComment(
+          currentSession.value,
           reviewId,
-          userId.value,
           commentText.trim()
         );
 
@@ -963,7 +1034,11 @@ export default {
 
       try {
         // Delete comment
-        const result = await review.deleteComment(reviewId, commentId);
+        const result = await review.deleteComment(
+          currentSession.value,
+          reviewId,
+          commentId
+        );
 
         if (result && result.error) {
           reviewError.value = result.error;
@@ -1229,7 +1304,8 @@ export default {
                 Array.isArray(thumbnailResult) && thumbnailResult.length > 0
                   ? thumbnailResult[0]
                   : thumbnailResult;
-              const thumbnailUrl = thumbnailData?.thumbnailUrl || thumbnailData?.thumbnail || null;
+              const thumbnailUrl =
+                thumbnailData?.thumbnailUrl || thumbnailData?.thumbnail || null;
 
               return {
                 ...friendItem,
@@ -1352,7 +1428,9 @@ export default {
         }
 
         showToastNotification(
-          `Recommended "${songInfo.value.name}" to ${friend.friendName || friend.friend}!`
+          `Recommended "${songInfo.value.name}" to ${
+            friend.friendName || friend.friend
+          }!`
         );
       } catch (err) {
         // Close modal immediately even on error
@@ -1969,10 +2047,43 @@ export default {
   border-radius: 4px;
 }
 
+.comment-avatar-small {
+  width: 1.2rem;
+  height: 1.2rem;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  flex-shrink: 0;
+  margin-right: 0.5rem;
+}
+
+.comment-icon-small {
+  width: 1.2rem;
+  height: 1.2rem;
+  border-radius: 50%;
+  background: rgba(74, 158, 255, 0.2);
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  flex-shrink: 0;
+  margin-right: 0.5rem;
+}
+
 .comment-user {
   color: #4a9eff;
   font-weight: 600;
   margin-right: 0.5rem;
+}
+
+.clickable-username {
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.clickable-username:hover {
+  color: #7b68ee;
 }
 
 .comment-text {
@@ -2082,7 +2193,32 @@ export default {
 }
 
 .activity-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
   margin-bottom: 1rem;
+}
+
+.reviewer-avatar-small {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  flex-shrink: 0;
+}
+
+.reviewer-icon-small {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: rgba(74, 158, 255, 0.2);
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  flex-shrink: 0;
 }
 
 .activity-text {

@@ -102,22 +102,28 @@ export const playlist = {
 
 // Review API
 export const review = {
-  postReview: (item, user, ratingNumber, notes) =>
-    apiCall("/api/Review/postReview", { item, user, ratingNumber, notes }),
+  postReview: (session, item, ratingNumber, notes) =>
+    apiCall("/api/Review/postReview", { session, item, ratingNumber, notes }),
 
-  updateReview: (review, ratingNumber, notes) =>
-    apiCall("/api/Review/updateReview", { review, ratingNumber, notes }),
+  updateReview: (session, review, ratingNumber, notes) =>
+    apiCall("/api/Review/updateReview", {
+      session,
+      review,
+      ratingNumber,
+      notes,
+    }),
 
-  deleteReview: (review) => apiCall("/api/Review/deleteReview", { review }),
+  deleteReview: (session, review) =>
+    apiCall("/api/Review/deleteReview", { session, review }),
 
   getReviewByItemAndUser: (item, user) =>
     apiCall("/api/Review/_getReviewByItemAndUser", { item, user }),
 
-  addComment: (review, commenter, comment) =>
-    apiCall("/api/Review/addComment", { review, commenter, comment }),
+  addComment: (session, review, comment) =>
+    apiCall("/api/Review/addComment", { session, review, comment }),
 
-  deleteComment: (review, commentId) =>
-    apiCall("/api/Review/deleteComment", { review, commentId }),
+  deleteComment: (session, review, comment) =>
+    apiCall("/api/Review/deleteComment", { session, review, comment }),
 
   getItemReviews: (item) => apiCall("/api/Review/_getItemReviews", { item }),
 

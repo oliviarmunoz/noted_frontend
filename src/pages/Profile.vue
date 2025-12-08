@@ -360,6 +360,43 @@
           </div>
         </section>
 
+        <!-- Remove Friend Confirmation Modal -->
+        <div
+          v-if="showRemoveFriendModal && friendToRemove"
+          class="modal-overlay"
+          @click.self="showRemoveFriendModal = false"
+        >
+          <div class="modal-content modal-content-confirm">
+            <button class="modal-close" @click="showRemoveFriendModal = false">
+              ×
+            </button>
+            <h3 class="modal-title">Remove Friend</h3>
+            <p class="modal-message">
+              Are you sure you want to remove
+              <strong>{{
+                friendToRemove.friendName || friendToRemove.friend
+              }}</strong>
+              as a friend?
+            </p>
+            <div class="modal-buttons">
+              <button
+                class="modal-btn modal-btn-cancel"
+                @click="showRemoveFriendModal = false"
+                :disabled="processingRequest"
+              >
+                Cancel
+              </button>
+              <button
+                class="modal-btn modal-btn-confirm"
+                @click="confirmRemoveFriend"
+                :disabled="processingRequest"
+              >
+                {{ processingRequest ? "Removing..." : "Remove Friend" }}
+              </button>
+            </div>
+          </div>
+        </div>
+
         <!-- Playlists Section (Favorites and Listen Later) -->
         <section class="profile-section">
           <h2 class="section-title">FAVORITES</h2>
@@ -671,6 +708,10 @@ export default {
     const sendingRequest = ref(false);
     const userSearchError = ref(null);
     const processingRequest = ref(false);
+
+    // Remove friend confirmation modal
+    const showRemoveFriendModal = ref(false);
+    const friendToRemove = ref(null);
 
     const { getPlaylistCount } = usePlaylists();
     const { showToastNotification } = useToast();
@@ -1658,8 +1699,8 @@ export default {
 
       try {
         const result = await friending.sendFriendRequest(
-          userId.value,
-          searchedUser.value.user
+          currentSession.value,
+          searchedUser.value.username
         );
 
         if (result && result.error) {
@@ -1690,8 +1731,8 @@ export default {
 
       try {
         const result = await friending.acceptFriendRequest(
-          request.requester,
-          userId.value
+          currentSession.value,
+          request.requester
         );
 
         if (result && result.error) {
@@ -1725,6 +1766,7 @@ export default {
 
       try {
         const result = await friending.removeFriendRequest(
+          currentSession.value,
           request.requester,
           userId.value
         );
@@ -1756,6 +1798,7 @@ export default {
 
       try {
         const result = await friending.removeFriendRequest(
+          currentSession.value,
           userId.value,
           request.target
         );
@@ -1781,24 +1824,22 @@ export default {
       }
     };
 
-    // Remove friend
-    const handleRemoveFriend = async (friend) => {
-      if (
-        !confirm(
-          `Are you sure you want to remove ${
-            friend.friendName || friend.friend
-          } as a friend?`
-        )
-      ) {
-        return;
-      }
+    // Remove friend - show confirmation modal
+    const handleRemoveFriend = (friend) => {
+      friendToRemove.value = friend;
+      showRemoveFriendModal.value = true;
+    };
+
+    // Confirm and execute friend removal
+    const confirmRemoveFriend = async () => {
+      if (!friendToRemove.value) return;
 
       processingRequest.value = true;
 
       try {
         const result = await friending.removeFriend(
-          userId.value,
-          friend.friend
+          currentSession.value,
+          friendToRemove.value.friend
         );
 
         if (result && result.error) {
@@ -1806,7 +1847,13 @@ export default {
           return;
         }
 
-        showToastNotification("Friend removed");
+        const friendName =
+          friendToRemove.value.friendName || friendToRemove.value.friend;
+        showToastNotification(`You have removed ${friendName} as a friend.`);
+
+        // Close modal and reset
+        showRemoveFriendModal.value = false;
+        friendToRemove.value = null;
 
         // Reload friends
         await Promise.all([loadFriends(), loadCurrentUserFriends()]);
@@ -2023,6 +2070,9 @@ export default {
       handleDeclineRequest,
       handleCancelRequest,
       handleRemoveFriend,
+      confirmRemoveFriend,
+      showRemoveFriendModal,
+      friendToRemove,
       thumbnailUrl,
       uploadingThumbnail,
       fileInput,
@@ -2862,6 +2912,11 @@ export default {
   max-height: 80vh;
   overflow-y: auto;
   backdrop-filter: blur(10px);
+  position: relative;
+}
+
+.modal-content-confirm {
+  padding: 2rem;
 }
 
 .modal-header {
@@ -2880,26 +2935,96 @@ export default {
 }
 
 .modal-close {
-  background: transparent;
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: none;
   border: none;
   color: #7b8ca8;
   font-size: 1.5rem;
   cursor: pointer;
-  padding: 0;
-  width: 30px;
-  height: 30px;
+  width: 2rem;
+  height: 2rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: color 0.2s ease;
+  border-radius: 4px;
+  transition: all 0.2s ease;
 }
 
 .modal-close:hover {
+  background: rgba(123, 140, 168, 0.1);
   color: #ffffff;
 }
 
 .modal-body {
   padding: 1.5rem;
+}
+
+.modal-title {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #ffffff;
+  margin: 0 0 1rem 0;
+  letter-spacing: -0.02em;
+}
+
+.modal-message {
+  color: #7b8ca8;
+  font-size: 1rem;
+  margin: 0 0 2rem 0;
+  line-height: 1.6;
+}
+
+.modal-message strong {
+  color: #4a9eff;
+  font-weight: 600;
+}
+
+.modal-buttons {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+}
+
+.modal-btn {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.modal-btn-cancel {
+  background: rgba(123, 140, 168, 0.1);
+  border: 1px solid rgba(123, 140, 168, 0.3);
+  color: #7b8ca8;
+}
+
+.modal-btn-cancel:hover {
+  background: rgba(123, 140, 168, 0.2);
+  border-color: rgba(123, 140, 168, 0.5);
+  color: #ffffff;
+}
+
+.modal-btn-confirm {
+  background: rgba(255, 107, 157, 0.1);
+  border: 1px solid rgba(255, 107, 157, 0.3);
+  color: #ff6b9d;
+}
+
+.modal-btn-confirm:hover {
+  background: rgba(255, 107, 157, 0.2);
+  border-color: #ff6b9d;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(255, 107, 157, 0.3);
+}
+
+.modal-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .friend-search-input {

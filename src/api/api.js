@@ -41,17 +41,21 @@ async function apiCallWithFile(endpoint, formData) {
 
 // Friending API
 export const friending = {
-  sendFriendRequest: (user, target) =>
-    apiCall("/api/Friending/sendFriendRequest", { user, target }),
+  sendFriendRequest: (session, targetUsername) =>
+    apiCall("/api/Friending/sendFriendRequest", { session, targetUsername }),
 
-  acceptFriendRequest: (requester, target) =>
-    apiCall("/api/Friending/acceptFriendRequest", { requester, target }),
+  acceptFriendRequest: (session, requester) =>
+    apiCall("/api/Friending/acceptFriendRequest", { session, requester }),
 
-  removeFriendRequest: (requester, target) =>
-    apiCall("/api/Friending/removeFriendRequest", { requester, target }),
+  removeFriendRequest: (session, requester, target) =>
+    apiCall("/api/Friending/removeFriendRequest", {
+      session,
+      requester,
+      target,
+    }),
 
-  removeFriend: (user, friend) =>
-    apiCall("/api/Friending/removeFriend", { user, friend }),
+  removeFriend: (session, friend) =>
+    apiCall("/api/Friending/removeFriend", { session, friend }),
 
   getFriends: (user) => apiCall("/api/Friending/_getFriends", { user }),
 

@@ -11,8 +11,6 @@ export function useEntities() {
    */
   const loadEntityByExternalId = async (externalId) => {
     try {
-      console.log(`[useEntities] Loading entity by externalId: ${externalId}`);
-
       const entity = await musicDiscovery.getEntityFromId(externalId);
 
       if (entity && entity.error) {
@@ -35,15 +33,6 @@ export function useEntities() {
       }
 
       if (musicEntity) {
-        console.log(`[useEntities] Successfully loaded entity:`, {
-          name: musicEntity.name,
-          artist: musicEntity.artistName,
-          uri: musicEntity.uri,
-          _id: musicEntity._id,
-          externalId: musicEntity.externalId,
-          externalURL: musicEntity.externalURL,
-        });
-
         return {
           item: externalId,
           name: musicEntity.name || "Unknown",

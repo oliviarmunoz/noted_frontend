@@ -70,7 +70,6 @@ export function usePlaylists() {
       const itemDetails = await Promise.all(
         paginatedItems.map(async (itemObj) => {
           const itemId = itemObj.item || itemObj;
-          console.log(`[usePlaylists] Loading details for playlist item: ${itemId}`);
           return await loadEntityByExternalId(itemId);
         })
       );

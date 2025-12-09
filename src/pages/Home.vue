@@ -1374,24 +1374,24 @@ export default {
         
         // Process batch in parallel
         await Promise.all(
-          batch.map(async (review) => {
-            if (!review.id) return;
+          batch.map(async (reviewItem) => {
+            if (!reviewItem.id) return;
             
             try {
-              const reviewComments = await review.getReviewComments(review.id).catch(err => {
-                console.warn(`[Home] Error loading comments for review ${review.id}:`, err);
+              const reviewComments = await review.getReviewComments(reviewItem.id).catch(err => {
+                console.warn(`[Home] Error loading comments for review ${reviewItem.id}:`, err);
                 return null;
               });
 
               if (reviewComments && !reviewComments.error) {
-                review.comments = await this.enhanceCommentsWithUsernames(reviewComments || []);
+                reviewItem.comments = await this.enhanceCommentsWithUsernames(reviewComments || []);
               }
               
-              review.commentsLoaded = true;
+              reviewItem.commentsLoaded = true;
             } catch (err) {
-              console.warn(`[Home] Error loading comments for review ${review.id}:`, err);
-              review.comments = review.comments || [];
-              review.commentsLoaded = true;
+              console.warn(`[Home] Error loading comments for review ${reviewItem.id}:`, err);
+              reviewItem.comments = reviewItem.comments || [];
+              reviewItem.commentsLoaded = true;
             }
           })
         );

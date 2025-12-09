@@ -70,7 +70,52 @@
           </div>
         </div>
         <div class="user-info">
-          <h1 class="username">{{ username || "Loading..." }}</h1>
+          <div class="username-header">
+            <h1 class="username">{{ username || "Loading..." }}</h1>
+            <!-- Friend Request Button (only for other users' profiles) -->
+            <div v-if="!isOwnProfile && currentUserId" class="friend-status-container">
+              <button
+                v-if="friendStatus === 'not_friends'"
+                class="friend-request-btn"
+                @click="handleSendFriendRequestFromProfile"
+                :disabled="sendingFriendRequest"
+                title="Send friend request"
+              >
+                <span class="friend-btn-icon">+</span>
+                Add Friend
+              </button>
+              <button
+                v-else-if="friendStatus === 'outgoing_request'"
+                class="friend-request-btn friend-request-btn-pending"
+                @click="handleCancelRequestFromProfile"
+                :disabled="processingRequest"
+                title="Cancel friend request"
+              >
+                <span class="friend-btn-icon">×</span>
+                Cancel Request
+              </button>
+              <button
+                v-else-if="friendStatus === 'incoming_request'"
+                class="friend-request-btn friend-request-btn-incoming"
+                @click="handleAcceptRequestFromProfile"
+                :disabled="processingRequest"
+                title="Accept friend request"
+              >
+                <span class="friend-btn-icon">✓</span>
+                Accept Request
+              </button>
+              <button
+                v-else-if="friendStatus === 'friends'"
+                class="friend-request-btn friend-request-btn-friends"
+                @click="handleRemoveFriendFromProfile"
+                :disabled="processingRequest"
+                title="Click to remove friend"
+              >
+                <span class="friend-btn-icon">✓</span>
+                Friends
+              </button>
+            </div>
+          </div>
           <!-- Bio Section -->
           <div class="bio-section">
             <div v-if="!isEditingBio && !isOwnProfile" class="bio-display">
@@ -320,7 +365,10 @@
                       :key="request.request"
                       class="friend-item friend-request-item"
                     >
-                      <div class="friend-avatar">
+                      <div 
+                        class="friend-avatar clickable-avatar"
+                        @click="navigateToUserProfile(request.requester)"
+                      >
                         <img
                           v-if="request.requesterThumbnail"
                           :src="request.requesterThumbnail"
@@ -331,7 +379,10 @@
                         <span v-else class="friend-icon">👤</span>
                       </div>
                       <div class="friend-info">
-                        <div class="friend-name">
+                        <div 
+                          class="friend-name clickable-name"
+                          @click="navigateToUserProfile(request.requester)"
+                        >
                           {{ request.requesterName || request.requester }}
                         </div>
                       </div>
@@ -369,7 +420,10 @@
                       :key="request.request"
                       class="friend-item friend-request-item"
                     >
-                      <div class="friend-avatar">
+                      <div 
+                        class="friend-avatar clickable-avatar"
+                        @click="navigateToUserProfile(request.target)"
+                      >
                         <img
                           v-if="request.targetThumbnail"
                           :src="request.targetThumbnail"
@@ -380,7 +434,10 @@
                         <span v-else class="friend-icon">👤</span>
                       </div>
                       <div class="friend-info">
-                        <div class="friend-name">
+                        <div 
+                          class="friend-name clickable-name"
+                          @click="navigateToUserProfile(request.target)"
+                        >
                           {{ request.targetName || request.target }}
                         </div>
                       </div>
@@ -769,6 +826,7 @@ export default {
     const currentUserFriends = ref([]); // Friends of the current logged-in user
     const incomingRequests = ref([]);
     const outgoingRequests = ref([]);
+    const sendingFriendRequest = ref(false);
 
     const favoritesCount = ref(0);
     const listenLaterCount = ref(0);
@@ -1037,7 +1095,6 @@ export default {
         }
 
         const result = await auth.getUsername(userId.value);
-        console.log("[Profile] getUsername API response:", result);
 
         if (result && result.error) {
           console.error("[Profile] Error loading username:", result.error);
@@ -1186,12 +1243,92 @@ export default {
         });
 
         reviews.value = reviewsWithDetails;
+
+        // Load upvote data for all reviews
+        await loadUpvoteDataInBatches();
       } catch (error) {
         console.error("[Profile] Error loading reviews:", error);
         reviewsError.value = error.message || "Failed to load reviews";
         reviews.value = [];
       } finally {
         loadingReviews.value = false;
+      }
+    };
+
+    // Load upvote data for reviews in batches
+    const loadUpvoteDataInBatches = async () => {
+      if (!reviews.value || reviews.value.length === 0) {
+        return;
+      }
+
+      // Process reviews in batches of 5 to avoid overwhelming the backend
+      const batchSize = 5;
+      const reviewsToProcess = reviews.value.filter(r => r.review && !r.upvoteDataLoaded);
+      
+      for (let i = 0; i < reviewsToProcess.length; i += batchSize) {
+        const batch = reviewsToProcess.slice(i, i + batchSize);
+        
+        // Process batch in parallel
+        await Promise.all(
+          batch.map(async (reviewItem) => {
+            if (!reviewItem.review) return;
+            
+            try {
+              // Always load upvote count
+              const countPromise = upvote.getUpvoteCount(reviewItem.review).catch(err => {
+                console.warn(`[Profile] Error loading upvote count for ${reviewItem.review}:`, err);
+                return null;
+              });
+
+              // Only load hasUpvoted if user is logged in
+              const hasUpvotedPromise = currentUserId.value
+                ? upvote.hasUpvoted(currentUserId.value, reviewItem.review).catch(err => {
+                    console.warn(`[Profile] Error loading hasUpvoted for ${reviewItem.review}:`, err);
+                    return null;
+                  })
+                : Promise.resolve(null);
+
+              const [countResult, hasUpvotedResult] = await Promise.all([
+                countPromise,
+                hasUpvotedPromise,
+              ]);
+
+              // Extract upvote count
+              if (countResult && !countResult.error) {
+                const countData = Array.isArray(countResult) && countResult.length > 0
+                  ? countResult[0]
+                  : countResult;
+                reviewItem.upvoteCount = countData?.count || 0;
+              }
+
+              // Extract hasUpvoted status (only if user is logged in)
+              if (currentUserId.value && hasUpvotedResult && !hasUpvotedResult.error) {
+                const hasUpvotedData = Array.isArray(hasUpvotedResult) && hasUpvotedResult.length > 0
+                  ? hasUpvotedResult[0]
+                  : hasUpvotedResult;
+                reviewItem.hasUpvoted = hasUpvotedData?.hasUpvoted || false;
+              } else {
+                reviewItem.hasUpvoted = false;
+              }
+              
+              reviewItem.upvoteDataLoaded = true;
+            } catch (err) {
+              console.warn(
+                `[Profile] Error loading upvote data for review ${reviewItem.review}:`,
+                err
+              );
+              // Set defaults on error
+              reviewItem.upvoteCount = reviewItem.upvoteCount || 0;
+              reviewItem.hasUpvoted = reviewItem.hasUpvoted || false;
+              reviewItem.upvoteDataLoaded = true;
+            }
+          })
+        );
+        
+        // Small delay between batches to avoid overwhelming the backend
+        if (i + batchSize < reviewsToProcess.length) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
       }
     };
 
@@ -1206,8 +1343,8 @@ export default {
     // Load playlist counts (lightweight - no entity details)
     const loadPlaylistCounts = async () => {
       try {
-        // Only load counts for own profile (requires session)
-        if (!isOwnProfile.value || !currentSession.value) {
+        // Need userId to load counts (works for any user's profile)
+        if (!userId.value) {
           favoritesCount.value = 0;
           listenLaterCount.value = 0;
           return;
@@ -1457,12 +1594,19 @@ export default {
 
     // Load friend requests
     const loadFriendRequests = async () => {
+      // Only load for own profile or when viewing another user's profile (to check status)
+      if (!currentUserId.value) {
+        incomingRequests.value = [];
+        outgoingRequests.value = [];
+        return;
+      }
+
       loadingRequests.value = true;
 
       try {
-        // Load incoming requests
+        // Load incoming requests (for current user)
         const incomingResult = await friending.getIncomingRequests(
-          userId.value
+          currentUserId.value
         );
         if (incomingResult && !incomingResult.error) {
           const requesterIds = (incomingResult || []).map(r => r.requester);
@@ -1503,9 +1647,9 @@ export default {
           incomingRequests.value = [];
         }
 
-        // Load outgoing requests
+        // Load outgoing requests (for current user)
         const outgoingResult = await friending.getOutgoingRequests(
-          userId.value
+          currentUserId.value
         );
         if (outgoingResult && !outgoingResult.error) {
           const targetIds = (outgoingResult || []).map(r => r.target);
@@ -1557,7 +1701,6 @@ export default {
     // Search for user by username
     const searchUser = async () => {
       const searchQuery = friendSearchQuery.value.trim();
-      console.log("[Profile] Searching for user:", searchQuery);
 
       if (!searchQuery) {
         userSearchError.value = "Please enter a username";
@@ -1569,15 +1712,9 @@ export default {
       searchedUser.value = null;
 
       try {
-        console.log(
-          "[Profile] Calling getUserByUsername API with:",
-          searchQuery
-        );
         const result = await auth.getUserByUsername(searchQuery);
-        console.log("[Profile] getUserByUsername API response:", result);
 
         if (result && result.error) {
-          console.log("[Profile] API returned error:", result.error);
           userSearchError.value = result.error || "User not found";
           searchedUser.value = null;
           return;
@@ -1657,7 +1794,158 @@ export default {
       }
     };
 
-    // Send friend request
+    // Computed property to determine friend status with viewed user
+    const friendStatus = computed(() => {
+      if (isOwnProfile.value || !userId.value || !currentUserId.value) {
+        return null;
+      }
+
+      // Check if already friends
+      const isFriend = currentUserFriends.value.some(
+        (f) => f.friend === userId.value || f === userId.value
+      );
+      if (isFriend) {
+        return "friends";
+      }
+
+      // Check if there's an outgoing request (we requested them)
+      const hasOutgoingRequest = outgoingRequests.value.some(
+        (r) => r.target === userId.value
+      );
+      if (hasOutgoingRequest) {
+        return "outgoing_request";
+      }
+
+      // Check if there's an incoming request (they requested us)
+      const hasIncomingRequest = incomingRequests.value.some(
+        (r) => r.requester === userId.value
+      );
+      if (hasIncomingRequest) {
+        return "incoming_request";
+      }
+
+      return "not_friends";
+    });
+
+    // Send friend request from profile page
+    const handleSendFriendRequestFromProfile = async () => {
+      if (!userId.value || !currentSession.value || !username.value) {
+        showToastNotification("Error: Unable to send friend request");
+        return;
+      }
+
+      sendingFriendRequest.value = true;
+
+      try {
+        const result = await friending.sendFriendRequest(
+          currentSession.value,
+          username.value
+        );
+
+        if (result && result.error) {
+          showToastNotification(
+            result.error || "Failed to send friend request"
+          );
+          return;
+        }
+
+        showToastNotification("Friend request sent!");
+
+        // Reload requests to update status
+        await loadFriendRequests();
+      } catch (error) {
+        console.error("[Profile] Error sending friend request:", error);
+        showToastNotification(error.message || "Failed to send friend request");
+      } finally {
+        sendingFriendRequest.value = false;
+      }
+    };
+
+    // Accept friend request from profile page
+    const handleAcceptRequestFromProfile = async () => {
+      if (!userId.value || !currentSession.value) {
+        showToastNotification("Error: Unable to accept friend request");
+        return;
+      }
+
+      // Find the incoming request
+      const incomingRequest = incomingRequests.value.find(
+        (r) => r.requester === userId.value
+      );
+
+      if (!incomingRequest) {
+        showToastNotification("Friend request not found");
+        return;
+      }
+
+      await handleAcceptRequest(incomingRequest);
+    };
+
+    // Cancel friend request from profile page
+    const handleCancelRequestFromProfile = async () => {
+      if (!userId.value || !currentUserId.value || !currentSession.value) {
+        showToastNotification("Error: Unable to cancel friend request");
+        return;
+      }
+
+      processingRequest.value = true;
+
+      try {
+        const result = await friending.removeFriendRequest(
+          currentSession.value,
+          currentUserId.value,
+          userId.value
+        );
+
+        if (result && result.error) {
+          showToastNotification(
+            result.error || "Failed to cancel friend request"
+          );
+          return;
+        }
+
+        showToastNotification("Friend request cancelled");
+
+        // Reload requests to update status
+        await loadFriendRequests();
+      } catch (error) {
+        console.error("[Profile] Error cancelling friend request:", error);
+        showToastNotification(
+          error.message || "Failed to cancel friend request"
+        );
+      } finally {
+        processingRequest.value = false;
+      }
+    };
+
+    // Remove friend from profile page
+    const handleRemoveFriendFromProfile = () => {
+      if (!userId.value) {
+        showToastNotification("Error: Unable to remove friend");
+        return;
+      }
+
+      // Find the friend in current user's friends list
+      const friend = currentUserFriends.value.find(
+        (f) => f.friend === userId.value || f === userId.value
+      );
+
+      if (!friend) {
+        showToastNotification("Friend not found");
+        return;
+      }
+
+      // Get the friend's username for the modal
+      const friendData = {
+        friend: userId.value,
+        friendName: username.value || userId.value,
+      };
+
+      friendToRemove.value = friendData;
+      showRemoveFriendModal.value = true;
+    };
+
+    // Send friend request (from modal)
     const handleSendFriendRequest = async () => {
       if (!searchedUser.value) {
         await searchUser();
@@ -1825,8 +2113,12 @@ export default {
         showRemoveFriendModal.value = false;
         friendToRemove.value = null;
 
-        // Reload friends
-        await Promise.all([loadFriends(), loadCurrentUserFriends()]);
+        // Reload friends and requests to update status
+        await Promise.all([
+          loadFriends(),
+          loadCurrentUserFriends(),
+          loadFriendRequests(),
+        ]);
       } catch (error) {
         console.error("[Profile] Error removing friend:", error);
         showToastNotification(error.message || "Failed to remove friend");
@@ -1966,6 +2258,27 @@ export default {
       }
     );
 
+    // Load current user's friends list (for checking friendship status)
+    // Must be defined before the watch that uses it
+    const loadCurrentUserFriends = async () => {
+      if (!currentUserId.value) {
+        currentUserFriends.value = [];
+        return;
+      }
+
+      try {
+        const result = await friending.getFriends(currentUserId.value);
+        if (result && !result.error) {
+          currentUserFriends.value = result || [];
+        } else {
+          currentUserFriends.value = [];
+        }
+      } catch (error) {
+        console.error("[Profile] Error loading current user's friends:", error);
+        currentUserFriends.value = [];
+      }
+    };
+
     // Watch for currentUserId changes to load current user's friends
     watch(
       () => currentUserId.value,
@@ -2009,8 +2322,13 @@ export default {
           console.warn("[Profile] Error loading playlist items:", err);
         });
         
-        // Load friend requests last (only for own profile)
+        // Load friend requests (for own profile or to check status when viewing others)
         if (isOwnProfile.value) {
+          loadFriendRequests().catch(err => {
+            console.warn("[Profile] Error loading friend requests:", err);
+          });
+        } else if (currentUserId.value) {
+          // Load friend requests to check status when viewing other users' profiles
           loadFriendRequests().catch(err => {
             console.warn("[Profile] Error loading friend requests:", err);
           });
@@ -2022,27 +2340,7 @@ export default {
       { immediate: true }
     );
 
-    // Load current user's friends list (for checking friendship status)
-    const loadCurrentUserFriends = async () => {
-      if (!currentUserId.value) {
-        currentUserFriends.value = [];
-        return;
-      }
-
-      try {
-        const result = await friending.getFriends(currentUserId.value);
-        if (result && !result.error) {
-          currentUserFriends.value = result || [];
-        } else {
-          currentUserFriends.value = [];
-        }
-      } catch (error) {
-        console.error("[Profile] Error loading current user's friends:", error);
-        currentUserFriends.value = [];
-      }
-    };
-
-    // Navigate to user profile by username (only if already friends)
+    // Navigate to user profile by username (allows friends and friend requests)
     const navigateToUserProfile = async (targetUserId) => {
       if (!targetUserId) return;
 
@@ -2057,9 +2355,20 @@ export default {
         (f) => f.friend === targetUserId || f === targetUserId
       );
 
-      if (!isCurrentUserFriend && !isViewedProfileFriend) {
+      // Check if the target user is in incoming friend requests (they requested us)
+      const isIncomingRequest = incomingRequests.value.some(
+        (r) => r.requester === targetUserId
+      );
+
+      // Check if the target user is in outgoing friend requests (we requested them)
+      const isOutgoingRequest = outgoingRequests.value.some(
+        (r) => r.target === targetUserId
+      );
+
+      // Allow navigation if user is a friend, in friend requests, or is a friend of the viewed profile
+      if (!isCurrentUserFriend && !isViewedProfileFriend && !isIncomingRequest && !isOutgoingRequest) {
         showToastNotification(
-          "You can only view profiles of users you are friends with"
+          "You can only view profiles of users you are friends with or have pending requests with"
         );
         return;
       }
@@ -2120,6 +2429,8 @@ export default {
       userSearchError,
       processingRequest,
       isOwnProfile,
+      currentUserId: computed(() => currentUserId.value),
+      friendStatus,
       navigateToReview,
       navigateToUserProfile,
       handleDeleteReview,
@@ -2128,10 +2439,15 @@ export default {
       togglingUpvote,
       searchUser,
       handleSendFriendRequest,
+      handleSendFriendRequestFromProfile,
       handleAcceptRequest,
+      handleAcceptRequestFromProfile,
+      handleCancelRequestFromProfile,
       handleDeclineRequest,
       handleCancelRequest,
       handleRemoveFriend,
+      handleRemoveFriendFromProfile,
+      sendingFriendRequest,
       confirmRemoveFriend,
       showRemoveFriendModal,
       friendToRemove,
@@ -2288,11 +2604,103 @@ export default {
   flex: 1;
 }
 
+.username-header {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
 .username {
   font-size: 2rem;
   font-weight: 700;
   color: #ffffff;
-  margin-bottom: 1rem;
+  margin: 0;
+}
+
+.friend-status-container {
+  display: flex;
+  align-items: center;
+}
+
+.friend-request-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: rgba(74, 158, 255, 0.2);
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  border-radius: 6px;
+  color: #4a9eff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.friend-request-btn:hover:not(:disabled) {
+  background: rgba(74, 158, 255, 0.3);
+  border-color: rgba(74, 158, 255, 0.5);
+  transform: translateY(-1px);
+}
+
+.friend-request-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.friend-request-btn-pending {
+  background: rgba(255, 193, 7, 0.2);
+  border-color: rgba(255, 193, 7, 0.3);
+  color: #ffc107;
+}
+
+.friend-request-btn-pending:hover:not(:disabled) {
+  background: rgba(255, 193, 7, 0.3);
+  border-color: rgba(255, 193, 7, 0.5);
+}
+
+.friend-request-btn-incoming {
+  background: rgba(76, 175, 80, 0.2);
+  border-color: rgba(76, 175, 80, 0.3);
+  color: #4caf50;
+}
+
+.friend-request-btn-incoming:hover:not(:disabled) {
+  background: rgba(76, 175, 80, 0.3);
+  border-color: rgba(76, 175, 80, 0.5);
+}
+
+.friend-request-btn-friends {
+  background: rgba(76, 175, 80, 0.2);
+  border-color: rgba(76, 175, 80, 0.3);
+  color: #4caf50;
+}
+
+.friend-request-btn-friends:hover:not(:disabled) {
+  background: rgba(255, 107, 107, 0.2);
+  border-color: rgba(255, 107, 107, 0.3);
+  color: #ff6b6b;
+}
+
+.friend-status-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: rgba(76, 175, 80, 0.15);
+  border: 1px solid rgba(76, 175, 80, 0.3);
+  border-radius: 6px;
+  color: #4caf50;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.friend-btn-icon {
+  font-size: 1rem;
+  line-height: 1;
 }
 
 /* Bio Section */
@@ -2951,6 +3359,16 @@ export default {
 
 .clickable-name:hover {
   color: #4a9eff;
+}
+
+.clickable-avatar {
+  cursor: pointer;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.clickable-avatar:hover {
+  opacity: 0.8;
+  transform: scale(1.05);
 }
 
 .friend-actions {

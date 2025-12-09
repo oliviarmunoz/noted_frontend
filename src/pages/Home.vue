@@ -272,6 +272,29 @@
               </span>
             </div>
             <p class="review-comment">{{ review.comment }}</p>
+            <div class="upvote-section">
+              <button
+                class="upvote-btn"
+                :class="{ 'is-upvoted': review.hasUpvoted }"
+                @click="handleToggleUpvote(review)"
+                :disabled="!userId || togglingUpvote === review.id"
+                :title="review.hasUpvoted ? 'Remove upvote' : 'Upvote this review'"
+              >
+                <svg
+                  class="upvote-icon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path d="M12 19V5M5 12l7-7 7 7" />
+                </svg>
+                <span class="upvote-count">{{ review.upvoteCount || 0 }}</span>
+              </button>
+            </div>
             <div
               class="comments-section"
               v-if="review.comments && review.comments.length > 0"
@@ -360,6 +383,7 @@ import {
   musicDiscovery,
   auth,
   userProfile,
+  upvote,
 } from "../api/api.js";
 
 export default {
@@ -395,6 +419,7 @@ export default {
     const { loadPlaylistItems, removeItemFromPlaylist } = usePlaylists();
     const { showToastNotification } = useToast();
     const { playlistUpdateEvent } = usePlaylistEvents();
+    const togglingUpvote = ref(null);
 
     // Current user thumbnail
     const currentUserThumbnail = ref(null);
@@ -1041,6 +1066,7 @@ export default {
       showToastNotification,
       navigateToUserProfile,
       currentUserThumbnail,
+      togglingUpvote,
     };
   },
   data() {
@@ -1301,6 +1327,11 @@ export default {
                   }
                 }
 
+                // Initialize upvote data with defaults - will be loaded in batches after feed loads
+                // This prevents blocking the feed load with too many parallel API calls
+                let upvoteCount = 0;
+                let hasUpvoted = false;
+
                 // Push review with complete music entity information
                 allReviews.push({
                   id: reviewId,
@@ -1321,6 +1352,8 @@ export default {
                   comments: comments,
                   date: reviewData.date, // Store date for sorting
                   externalURL: songExternalURL, // Add external URL for Spotify link
+                  upvoteCount: upvoteCount,
+                  hasUpvoted: hasUpvoted,
                 });
               } catch (err) {
                 console.warn(
@@ -1354,11 +1387,80 @@ export default {
         this.reviewsLimit = 10;
         this.reviewsHasMore = allReviews.length > this.reviewsLimit;
         this.reviews = allReviews.slice(0, this.reviewsLimit);
+        
+        // Load upvote data in batches after feed is displayed (non-blocking)
+        this.loadUpvoteDataInBatches();
       } catch (err) {
         console.error("Error loading feed:", err);
         this.error = err.message || "Failed to load feed";
       } finally {
         this.loading = false;
+      }
+    },
+    async loadUpvoteDataInBatches() {
+      const currentUser = this.getUserId();
+      if (!currentUser || !this.reviews || this.reviews.length === 0) {
+        return;
+      }
+
+      // Process reviews in batches of 5 to avoid overwhelming the backend
+      const batchSize = 5;
+      const reviewsToProcess = this.reviews.filter(r => r.id && !r.upvoteDataLoaded);
+      
+      for (let i = 0; i < reviewsToProcess.length; i += batchSize) {
+        const batch = reviewsToProcess.slice(i, i + batchSize);
+        
+        // Process batch with a small delay between batches
+        await Promise.all(
+          batch.map(async (review) => {
+            if (!review.id) return;
+            
+            try {
+              const [countResult, hasUpvotedResult] = await Promise.all([
+                upvote.getUpvoteCount(review.id).catch(err => {
+                  console.warn(`[Home] Error loading upvote count for ${review.id}:`, err);
+                  return null;
+                }),
+                upvote.hasUpvoted(currentUser, review.id).catch(err => {
+                  console.warn(`[Home] Error loading hasUpvoted for ${review.id}:`, err);
+                  return null;
+                }),
+              ]);
+
+              // Extract upvote count
+              if (countResult && !countResult.error) {
+                const countData = Array.isArray(countResult) && countResult.length > 0
+                  ? countResult[0]
+                  : countResult;
+                review.upvoteCount = countData?.count || 0;
+              }
+
+              // Extract hasUpvoted status
+              if (hasUpvotedResult && !hasUpvotedResult.error) {
+                const hasUpvotedData = Array.isArray(hasUpvotedResult) && hasUpvotedResult.length > 0
+                  ? hasUpvotedResult[0]
+                  : hasUpvotedResult;
+                review.hasUpvoted = hasUpvotedData?.hasUpvoted || false;
+              }
+              
+              review.upvoteDataLoaded = true;
+            } catch (err) {
+              console.warn(
+                `[Home] Error loading upvote data for review ${review.id}:`,
+                err
+              );
+              // Set defaults on error
+              review.upvoteCount = review.upvoteCount || 0;
+              review.hasUpvoted = review.hasUpvoted || false;
+              review.upvoteDataLoaded = true;
+            }
+          })
+        );
+        
+        // Small delay between batches to avoid overwhelming the backend
+        if (i + batchSize < reviewsToProcess.length) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
       }
     },
     loadMoreReviews() {
@@ -1369,6 +1471,9 @@ export default {
       this.reviewsHasMore = this.allReviews.length > this.reviewsLimit;
       this.reviews = this.allReviews.slice(0, this.reviewsLimit);
       this.loadingMoreReviews = false;
+      
+      // Load upvote data for newly displayed reviews
+      this.loadUpvoteDataInBatches();
     },
     async handleAddComment(reviewId) {
       if (!reviewId) {
@@ -1495,6 +1600,46 @@ export default {
       if (externalURL) {
         window.open(externalURL, "_blank", "noopener,noreferrer");
       }
+    },
+    async handleToggleUpvote(reviewItem) {
+      const currentUser = this.getUserId();
+      const currentSession = this.getCurrentSession();
+      if (!currentUser || !currentSession || !reviewItem || !reviewItem.id) {
+        this.showToastNotification("Error: User not authenticated or review not found");
+        return;
+      }
+
+      this.togglingUpvote = reviewItem.id;
+
+      try {
+        if (reviewItem.hasUpvoted) {
+          // Remove upvote
+          const result = await upvote.unvote(currentSession, reviewItem.id);
+          if (result && result.error) {
+            this.showToastNotification(result.error || "Failed to remove upvote");
+            return;
+          }
+          reviewItem.hasUpvoted = false;
+          reviewItem.upvoteCount = Math.max(0, (reviewItem.upvoteCount || 0) - 1);
+        } else {
+          // Add upvote
+          const result = await upvote.upvote(currentSession, reviewItem.id);
+          if (result && result.error) {
+            this.showToastNotification(result.error || "Failed to upvote review");
+            return;
+          }
+          reviewItem.hasUpvoted = true;
+          reviewItem.upvoteCount = (reviewItem.upvoteCount || 0) + 1;
+        }
+      } catch (err) {
+        console.error("[Home] Error toggling upvote:", err);
+        this.showToastNotification(err.message || "Failed to update upvote");
+      } finally {
+        this.togglingUpvote = null;
+      }
+    },
+    getCurrentSession() {
+      return this.currentSession;
     },
   },
 };
@@ -1873,6 +2018,62 @@ export default {
   color: #7b8ca8;
   margin: 0 0 1rem 0;
   line-height: 1.6;
+}
+
+.upvote-section {
+  display: flex;
+  align-items: center;
+  margin: 0.75rem 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(123, 140, 168, 0.1);
+}
+
+.upvote-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: rgba(10, 14, 26, 0.6);
+  border: 1px solid rgba(123, 140, 168, 0.2);
+  border-radius: 4px;
+  color: #7b8ca8;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.upvote-btn:hover:not(:disabled) {
+  background: rgba(10, 14, 26, 0.8);
+  border-color: rgba(74, 158, 255, 0.3);
+  color: #4a9eff;
+}
+
+.upvote-btn.is-upvoted {
+  background: rgba(74, 158, 255, 0.1);
+  border-color: rgba(74, 158, 255, 0.3);
+  color: #4a9eff;
+}
+
+.upvote-btn.is-upvoted:hover:not(:disabled) {
+  background: rgba(74, 158, 255, 0.2);
+  border-color: rgba(74, 158, 255, 0.5);
+}
+
+.upvote-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.upvote-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.upvote-count {
+  font-size: 0.9rem;
+  font-weight: 600;
 }
 
 .comment-input {

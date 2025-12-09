@@ -228,6 +228,29 @@
             <p v-if="review.notes" class="activity-comment">
               {{ review.notes }}
             </p>
+            <div class="upvote-section">
+              <button
+                class="upvote-btn"
+                :class="{ 'is-upvoted': review.hasUpvoted }"
+                @click="handleToggleUpvote(review)"
+                :disabled="!userId || togglingUpvote === review.id"
+                :title="review.hasUpvoted ? 'Remove upvote' : 'Upvote this review'"
+              >
+                <svg
+                  class="upvote-icon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path d="M12 19V5M5 12l7-7 7 7" />
+                </svg>
+                <span class="upvote-count">{{ review.upvoteCount || 0 }}</span>
+              </button>
+            </div>
             <div
               class="comments-section"
               v-if="review.comments && review.comments.length > 0"
@@ -428,6 +451,7 @@ import {
   playlist,
   friending,
   userProfile,
+  upvote,
 } from "../api/api.js";
 import { usePlaylists } from "../composables/usePlaylists.js";
 import { useToast } from "../composables/useToast.js";
@@ -467,6 +491,7 @@ export default {
     const friendSearchQuery = ref("");
     const filteredFriends = ref([]);
     const recommendingToFriend = ref(null);
+    const togglingUpvote = ref(null);
 
     const uri = computed(() => route.params.id);
 
@@ -728,6 +753,49 @@ export default {
               );
             }
 
+            // Load upvote count and check if user has upvoted
+            // Use Promise.allSettled to prevent one failure from blocking others
+            let upvoteCount = 0;
+            let hasUpvoted = false;
+            try {
+              const [countResult, hasUpvotedResult] = await Promise.allSettled([
+                upvote.getUpvoteCount(reviewId).catch(err => {
+                  console.warn(`[Review] Error loading upvote count for ${reviewId}:`, err);
+                  return null;
+                }),
+                userId.value ? upvote.hasUpvoted(userId.value, reviewId).catch(err => {
+                  console.warn(`[Review] Error loading hasUpvoted for ${reviewId}:`, err);
+                  return null;
+                }) : Promise.resolve(null),
+              ]);
+
+              // Extract upvote count
+              const countData = countResult.status === 'fulfilled' ? countResult.value : null;
+              if (countData && !countData.error) {
+                const count = Array.isArray(countData) && countData.length > 0
+                  ? countData[0]
+                  : countData;
+                upvoteCount = count?.count || 0;
+              }
+
+              // Extract hasUpvoted status
+              const hasUpvotedData = hasUpvotedResult.status === 'fulfilled' ? hasUpvotedResult.value : null;
+              if (hasUpvotedData && !hasUpvotedData.error && userId.value) {
+                const hasUpvotedValue = Array.isArray(hasUpvotedData) && hasUpvotedData.length > 0
+                  ? hasUpvotedData[0]
+                  : hasUpvotedData;
+                hasUpvoted = hasUpvotedValue?.hasUpvoted || false;
+              }
+            } catch (err) {
+              console.warn(
+                `[Review] Error loading upvote data for review ${reviewId}:`,
+                err
+              );
+              // Set defaults on error
+              upvoteCount = 0;
+              hasUpvoted = false;
+            }
+
             return {
               id: reviewId,
               userId: reviewUserId,
@@ -736,6 +804,8 @@ export default {
               rating: r.rating,
               notes: r.notes || r.text,
               comments: comments,
+              upvoteCount: upvoteCount,
+              hasUpvoted: hasUpvoted,
             };
           })
         );
@@ -1459,6 +1529,43 @@ export default {
       }
     );
 
+    // Toggle upvote on a review
+    const handleToggleUpvote = async (reviewItem) => {
+      if (!userId.value || !currentSession.value || !reviewItem || !reviewItem.id) {
+        showToastNotification("Error: User not authenticated or review not found");
+        return;
+      }
+
+      togglingUpvote.value = reviewItem.id;
+
+      try {
+        if (reviewItem.hasUpvoted) {
+          // Remove upvote
+          const result = await upvote.unvote(currentSession.value, reviewItem.id);
+          if (result && result.error) {
+            showToastNotification(result.error || "Failed to remove upvote");
+            return;
+          }
+          reviewItem.hasUpvoted = false;
+          reviewItem.upvoteCount = Math.max(0, (reviewItem.upvoteCount || 0) - 1);
+        } else {
+          // Add upvote
+          const result = await upvote.upvote(currentSession.value, reviewItem.id);
+          if (result && result.error) {
+            showToastNotification(result.error || "Failed to upvote review");
+            return;
+          }
+          reviewItem.hasUpvoted = true;
+          reviewItem.upvoteCount = (reviewItem.upvoteCount || 0) + 1;
+        }
+      } catch (err) {
+        console.error("[Review] Error toggling upvote:", err);
+        showToastNotification(err.message || "Failed to update upvote");
+      } finally {
+        togglingUpvote.value = null;
+      }
+    };
+
     // Navigate to user profile by username
     const navigateToUserProfile = async (targetUserId) => {
       if (!targetUserId) return;
@@ -1538,6 +1645,8 @@ export default {
       recommendingToFriend,
       filterFriends,
       handleRecommendToFriend,
+      handleToggleUpvote,
+      togglingUpvote,
     };
   },
 };
@@ -2170,6 +2279,62 @@ export default {
   color: #7b8ca8;
   margin: 0.75rem 0;
   line-height: 1.6;
+}
+
+.upvote-section {
+  display: flex;
+  align-items: center;
+  margin: 0.75rem 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(123, 140, 168, 0.1);
+}
+
+.upvote-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: rgba(10, 14, 26, 0.6);
+  border: 1px solid rgba(123, 140, 168, 0.2);
+  border-radius: 4px;
+  color: #7b8ca8;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.upvote-btn:hover:not(:disabled) {
+  background: rgba(10, 14, 26, 0.8);
+  border-color: rgba(74, 158, 255, 0.3);
+  color: #4a9eff;
+}
+
+.upvote-btn.is-upvoted {
+  background: rgba(74, 158, 255, 0.1);
+  border-color: rgba(74, 158, 255, 0.3);
+  color: #4a9eff;
+}
+
+.upvote-btn.is-upvoted:hover:not(:disabled) {
+  background: rgba(74, 158, 255, 0.2);
+  border-color: rgba(74, 158, 255, 0.5);
+}
+
+.upvote-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.upvote-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.upvote-count {
+  font-size: 0.9rem;
+  font-weight: 600;
 }
 
 .other-reviews {

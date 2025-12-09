@@ -208,3 +208,21 @@ export const userProfile = {
 
   getProfile: (user) => apiCall("/api/UserProfile/_getProfile", { user }),
 };
+
+// Upvote API
+export const upvote = {
+  upvote: (session, item) => apiCall("/api/Upvote/upvote", { session, item }),
+
+  unvote: (session, item) => apiCall("/api/Upvote/unvote", { session, item }),
+
+  hasUpvoted: (user, item) =>
+    apiCall("/api/Upvote/_hasUpvoted", { user, item }),
+
+  getUpvoteCount: (item) =>
+    apiCall("/api/Upvote/_getUpvoteCount", { item }),
+
+  getUpvotedItems: (user) =>
+    apiCall("/api/Upvote/_getUpvotedItems", { user }),
+
+  getUpvoters: (item) => apiCall("/api/Upvote/_getUpvoters", { item }),
+};

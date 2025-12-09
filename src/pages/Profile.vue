@@ -774,7 +774,7 @@ export default {
     const listenLaterCount = ref(0);
 
     const loadingReviews = ref(false);
-    const loadingFriends = ref(false);
+    const loadingFriends = ref(true); // Start as true to show loading state initially
     const loadingRequests = ref(false);
 
     const reviewsError = ref(null);
@@ -2640,7 +2640,7 @@ export default {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.upvote-btn:hover:not(:disabled) {
+.upvote-btn:hover:not(:disabled):not(.is-upvoted) {
   background: rgba(10, 14, 26, 0.8);
   border-color: rgba(74, 158, 255, 0.3);
   color: #4a9eff;
@@ -2655,8 +2655,9 @@ export default {
 }
 
 .upvote-btn.is-upvoted:hover:not(:disabled) {
-  background: rgba(255, 107, 157, 0.3);
-  border-color: #ff6b9d;
+  background: rgba(255, 107, 157, 0.3) !important;
+  border-color: #ff6b9d !important;
+  color: #ff6b9d !important;
   box-shadow: 0 0 16px rgba(255, 107, 157, 0.4);
   transform: scale(1.08);
 }

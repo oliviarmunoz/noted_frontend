@@ -267,6 +267,7 @@
                       :src="friend.friendThumbnail"
                       :alt="friend.friendName || friend.friend"
                       class="friend-avatar-image"
+                      loading="lazy"
                     />
                     <span v-else class="friend-icon">👤</span>
                   </div>
@@ -325,6 +326,7 @@
                           :src="request.requesterThumbnail"
                           :alt="request.requesterName || request.requester"
                           class="friend-avatar-image"
+                          loading="lazy"
                         />
                         <span v-else class="friend-icon">👤</span>
                       </div>
@@ -373,6 +375,7 @@
                           :src="request.targetThumbnail"
                           :alt="request.targetName || request.target"
                           class="friend-avatar-image"
+                          loading="lazy"
                         />
                         <span v-else class="friend-icon">👤</span>
                       </div>
@@ -628,14 +631,14 @@
                       <svg
                         class="upvote-icon"
                         viewBox="0 0 24 24"
-                        fill="none"
+                        :fill="review.hasUpvoted ? 'currentColor' : 'none'"
                         stroke="currentColor"
                         stroke-width="2"
                         stroke-linecap="round"
                         stroke-linejoin="round"
                         xmlns="http://www.w3.org/2000/svg"
                       >
-                        <path d="M12 19V5M5 12l7-7 7 7" />
+                        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
                       </svg>
                       <span class="upvote-count">{{ review.upvoteCount || 0 }}</span>
                     </button>
@@ -665,6 +668,7 @@ import {
 import { usePlaylists } from "../composables/usePlaylists.js";
 import { useToast } from "../composables/useToast.js";
 import { useAuth } from "../composables/useAuth.js";
+import { loadThumbnailsBatch, getThumbnail } from "../composables/useThumbnailCache.js";
 
 export default {
   name: "Profile",
@@ -817,11 +821,7 @@ export default {
         return;
       }
       try {
-        const result = await userProfile.getThumbnail(userId.value);
-        const thumbnailData =
-          Array.isArray(result) && result.length > 0 ? result[0] : result;
-        thumbnailUrl.value =
-          thumbnailData?.thumbnailUrl || thumbnailData?.thumbnail || null;
+        thumbnailUrl.value = await getThumbnail(userId.value);
         thumbnailError.value = null;
       } catch (error) {
         console.error("[Profile] Error loading thumbnail:", error);
@@ -1076,196 +1076,99 @@ export default {
         }
 
         const userReviews = result || [];
-
-        // Load entity details for each review
-        const reviewsWithDetails = await Promise.all(
-          userReviews.map(async (reviewData) => {
-            try {
-              // Get the target from the review (matching Home.vue logic)
-              const target = reviewData.target || reviewData.item;
-              let musicEntity = null;
-
-              // Get the music entity information using getEntity with the target
-              if (target) {
-                try {
-                  const entityResponse = await musicDiscovery.getEntity(target);
-
-                  if (entityResponse && entityResponse.error) {
-                    console.warn(
-                      `Error loading entity for target ${target}:`,
-                      entityResponse.error
-                    );
-                  } else if (entityResponse) {
-                    // Extract musicEntity from the response
-                    // According to API spec, _getEntityFromId returns:
-                    // [{ "musicEntity": {...} }]
-                    if (
-                      Array.isArray(entityResponse) &&
-                      entityResponse.length > 0
-                    ) {
-                      // Response is an array, get first element
-                      const firstResponse = entityResponse[0];
-                      musicEntity = firstResponse.musicEntity || firstResponse;
-                    } else if (entityResponse.musicEntity) {
-                      // Response has musicEntity property
-                      musicEntity = entityResponse.musicEntity;
-                    } else if (
-                      entityResponse._id ||
-                      entityResponse.name ||
-                      entityResponse.externalId
-                    ) {
-                      // Response is the entity directly (fallback)
-                      musicEntity = entityResponse;
-                    }
+        
+        // Limit initial reviews to first 10 for faster loading
+        const reviewsToLoad = userReviews.slice(0, 10);
+        const reviewTargets = reviewsToLoad.map(r => r.target || r.item).filter(Boolean);
+        
+        // Load all entity details in batches first (with concurrency limit)
+        const entityMap = new Map();
+        const batchSize = 5;
+        for (let i = 0; i < reviewTargets.length; i += batchSize) {
+          const batch = reviewTargets.slice(i, i + batchSize);
+          await Promise.all(
+            batch.map(async (target) => {
+              try {
+                const entityResponse = await musicDiscovery.getEntity(target);
+                if (entityResponse && !entityResponse.error) {
+                  let musicEntity = null;
+                  if (Array.isArray(entityResponse) && entityResponse.length > 0) {
+                    musicEntity = entityResponse[0].musicEntity || entityResponse[0];
+                  } else if (entityResponse.musicEntity) {
+                    musicEntity = entityResponse.musicEntity;
+                  } else if (entityResponse._id || entityResponse.name || entityResponse.externalId) {
+                    musicEntity = entityResponse;
                   }
-                } catch (e) {
-                  console.warn(
-                    `Error getting entity info for target ${target}:`,
-                    e
-                  );
+                  if (musicEntity) {
+                    entityMap.set(target, musicEntity);
+                  }
                 }
+              } catch (e) {
+                console.warn(`[Profile] Error loading entity for review target ${target}:`, e);
               }
+            })
+          );
+        }
 
-              // Extract URI and other info from musicEntity
-              const songUri =
-                musicEntity?.uri || musicEntity?.externalId || target;
-              const songName = musicEntity?.name || "Unknown Song";
-              const songArtist =
-                musicEntity?.artistName ||
-                musicEntity?.artist ||
-                "Unknown Artist";
-              const songImageUrl = musicEntity?.imageUrl || null;
-              const songAlbum =
-                musicEntity?.album || musicEntity?.albumName || null;
-              const songExternalURL = musicEntity?.externalURL || null;
+        // Process reviews using cached entities (synchronous, no API calls)
+        const reviewsWithDetails = reviewsToLoad.map((reviewData) => {
+          try {
+            // Get the target from the review (matching Home.vue logic)
+            const target = reviewData.target || reviewData.item;
+            // Use cached entity from batch load
+            const musicEntity = target ? entityMap.get(target) : null;
 
-              // Load upvote count and check if current user has upvoted
-              // Use Promise.allSettled to prevent one failure from blocking others
-              let upvoteCount = 0;
-              let hasUpvoted = false;
-              const reviewId = reviewData.review || reviewData._id;
-              if (reviewId && currentUserId.value) {
-                try {
-                  const [countResult, hasUpvotedResult] = await Promise.allSettled([
-                    upvote.getUpvoteCount(reviewId).catch(err => {
-                      console.warn(`[Profile] Error loading upvote count for ${reviewId}:`, err);
-                      return null;
-                    }),
-                    upvote.hasUpvoted(currentUserId.value, reviewId).catch(err => {
-                      console.warn(`[Profile] Error loading hasUpvoted for ${reviewId}:`, err);
-                      return null;
-                    }),
-                  ]);
+            // Extract URI and other info from musicEntity
+            const songUri =
+              musicEntity?.uri || musicEntity?.externalId || target;
+            const songName = musicEntity?.name || "Unknown Song";
+            const songArtist =
+              musicEntity?.artistName ||
+              musicEntity?.artist ||
+              "Unknown Artist";
+            const songImageUrl = musicEntity?.imageUrl || null;
+            const songAlbum =
+              musicEntity?.album || musicEntity?.albumName || null;
+            const songExternalURL = musicEntity?.externalURL || null;
 
-                  // Extract upvote count
-                  const countData = countResult.status === 'fulfilled' ? countResult.value : null;
-                  if (countData && !countData.error) {
-                    const count = Array.isArray(countData) && countData.length > 0
-                      ? countData[0]
-                      : countData;
-                    upvoteCount = count?.count || 0;
-                  }
-
-                  // Extract hasUpvoted status
-                  const hasUpvotedData = hasUpvotedResult.status === 'fulfilled' ? hasUpvotedResult.value : null;
-                  if (hasUpvotedData && !hasUpvotedData.error) {
-                    const hasUpvotedValue = Array.isArray(hasUpvotedData) && hasUpvotedData.length > 0
-                      ? hasUpvotedData[0]
-                      : hasUpvotedData;
-                    hasUpvoted = hasUpvotedValue?.hasUpvoted || false;
-                  }
-                } catch (err) {
-                  console.warn(
-                    `[Profile] Error loading upvote data for review ${reviewId}:`,
-                    err
-                  );
-                  // Set defaults on error
-                  upvoteCount = 0;
-                  hasUpvoted = false;
-                }
-              }
-
-              return {
-                ...reviewData,
-                review: reviewId,
-                songName: songName,
-                songArtist: songArtist,
-                songUri: songUri,
-                uri: songUri,
-                imageUrl: songImageUrl,
-                album: songAlbum,
-                // Ensure text/notes field is properly set (API returns "text" for _getUserReviews)
-                text: reviewData.text || reviewData.notes || "",
-                rating: reviewData.rating || 0,
-                date: reviewData.date, // Preserve date for sorting
-                externalURL: songExternalURL,
-                upvoteCount: upvoteCount,
-                hasUpvoted: hasUpvoted,
-              };
-            } catch (err) {
-              console.warn(
-                `Error processing review ${reviewData.review}:`,
-                err
-              );
-              // Load upvote data even if entity loading failed
-              // Use Promise.allSettled to prevent one failure from blocking others
-              let upvoteCount = 0;
-              let hasUpvoted = false;
-              const reviewId = reviewData.review || reviewData._id;
-              if (reviewId && currentUserId.value) {
-                try {
-                  const [countResult, hasUpvotedResult] = await Promise.allSettled([
-                    upvote.getUpvoteCount(reviewId).catch(err => {
-                      console.warn(`[Profile] Error loading upvote count for ${reviewId}:`, err);
-                      return null;
-                    }),
-                    upvote.hasUpvoted(currentUserId.value, reviewId).catch(err => {
-                      console.warn(`[Profile] Error loading hasUpvoted for ${reviewId}:`, err);
-                      return null;
-                    }),
-                  ]);
-
-                  const countData = countResult.status === 'fulfilled' ? countResult.value : null;
-                  if (countData && !countData.error) {
-                    const count = Array.isArray(countData) && countData.length > 0
-                      ? countData[0]
-                      : countData;
-                    upvoteCount = count?.count || 0;
-                  }
-
-                  const hasUpvotedData = hasUpvotedResult.status === 'fulfilled' ? hasUpvotedResult.value : null;
-                  if (hasUpvotedData && !hasUpvotedData.error) {
-                    const hasUpvotedValue = Array.isArray(hasUpvotedData) && hasUpvotedData.length > 0
-                      ? hasUpvotedData[0]
-                      : hasUpvotedData;
-                    hasUpvoted = hasUpvotedValue?.hasUpvoted || false;
-                  }
-                } catch (err) {
-                  console.warn(
-                    `[Profile] Error loading upvote data for review ${reviewId}:`,
-                    err
-                  );
-                  // Set defaults on error
-                  upvoteCount = 0;
-                  hasUpvoted = false;
-                }
-              }
-
-              // Return review with minimal info if entity loading fails
-              return {
-                ...reviewData,
-                review: reviewId,
-                songName: "Unknown Song",
-                songArtist: "Unknown Artist",
-                text: reviewData.text || reviewData.notes || "",
-                rating: reviewData.rating || 0,
-                date: reviewData.date, // Preserve date for sorting
-                upvoteCount: upvoteCount,
-                hasUpvoted: hasUpvoted,
-              };
-            }
-          })
-        );
+            const reviewId = reviewData.review || reviewData._id;
+            
+            return {
+              ...reviewData,
+              review: reviewId,
+              songName: songName,
+              songArtist: songArtist,
+              songUri: songUri,
+              uri: songUri,
+              imageUrl: songImageUrl,
+              album: songAlbum,
+              // Ensure text/notes field is properly set (API returns "text" for _getUserReviews)
+              text: reviewData.text || reviewData.notes || "",
+              rating: reviewData.rating || 0,
+              date: reviewData.date, // Preserve date for sorting
+              externalURL: songExternalURL,
+              upvoteCount: 0, // Will be loaded separately if needed
+              hasUpvoted: false, // Will be loaded separately if needed
+            };
+          } catch (err) {
+            console.warn(
+              `Error processing review ${reviewData.review}:`,
+              err
+            );
+            const reviewId = reviewData.review || reviewData._id;
+            return {
+              ...reviewData,
+              review: reviewId,
+              songName: "Unknown Song",
+              songArtist: "Unknown Artist",
+              text: reviewData.text || reviewData.notes || "",
+              rating: reviewData.rating || 0,
+              date: reviewData.date,
+              upvoteCount: 0,
+              hasUpvoted: false,
+            };
+          }
+        });
 
         // Sort reviews by most recent first (by date)
         reviewsWithDetails.sort((a, b) => {
@@ -1310,20 +1213,18 @@ export default {
           return;
         }
 
-        const favoritesResult = await playlist.getPlaylistItems(
-          userId.value,
-          "Favorites"
-        );
+        // Load both counts in parallel
+        const [favoritesResult, listenLaterResult] = await Promise.all([
+          playlist.getPlaylistItems(userId.value, "Favorites").catch(() => null),
+          playlist.getPlaylistItems(userId.value, "Listen Later").catch(() => null),
+        ]);
+
         if (!favoritesResult || favoritesResult.error) {
           favoritesCount.value = 0;
         } else {
           favoritesCount.value = (favoritesResult || []).length;
         }
 
-        const listenLaterResult = await playlist.getPlaylistItems(
-          userId.value,
-          "Listen Later"
-        );
         if (!listenLaterResult || listenLaterResult.error) {
           listenLaterCount.value = 0;
         } else {
@@ -1331,14 +1232,104 @@ export default {
         }
       } catch (error) {
         console.error("[Profile] Error loading playlist counts:", error);
+        favoritesCount.value = 0;
+        listenLaterCount.value = 0;
       }
     };
 
-    // Load playlist items with entity details
+    // Helper function to load entity details for a single item
+    const loadEntityForItem = async (itemId) => {
+      try {
+        // Try as external ID first (playlist items are stored as externalId)
+        let entityResponse = await musicDiscovery.getEntityFromId(itemId);
+
+        // Extract musicEntity from response
+        let musicEntity = null;
+        if (
+          Array.isArray(entityResponse) &&
+          entityResponse.length > 0
+        ) {
+          musicEntity =
+            entityResponse[0].musicEntity || entityResponse[0];
+        } else if (entityResponse?.musicEntity) {
+          musicEntity = entityResponse.musicEntity;
+        } else if (entityResponse && !entityResponse.error) {
+          musicEntity = entityResponse;
+        }
+
+        // If that didn't work, try as URI
+        if (!musicEntity || musicEntity.error) {
+          try {
+            entityResponse = await musicDiscovery.getEntityFromUri(itemId);
+            if (
+              Array.isArray(entityResponse) &&
+              entityResponse.length > 0
+            ) {
+              musicEntity =
+                entityResponse[0].musicEntity || entityResponse[0];
+            } else if (entityResponse?.musicEntity) {
+              musicEntity = entityResponse.musicEntity;
+            } else if (entityResponse && !entityResponse.error) {
+              musicEntity = entityResponse;
+            }
+          } catch (e) {
+            console.warn(
+              `[Profile] Could not load entity by URI for ${itemId}:`,
+              e
+            );
+          }
+        }
+
+        if (musicEntity && !musicEntity.error) {
+          return {
+            item: itemId,
+            name: musicEntity.name || "Unknown",
+            artist: musicEntity.artistName || musicEntity.artist || "",
+            uri: musicEntity.uri || musicEntity.externalId || itemId,
+            imageUrl: musicEntity.imageUrl || null,
+          };
+        }
+        return {
+          item: itemId,
+          name: "Unknown",
+          artist: "",
+          uri: itemId,
+          imageUrl: null,
+        };
+      } catch (err) {
+        console.warn(
+          `[Profile] Error loading entity for item ${itemId}:`,
+          err
+        );
+        return {
+          item: itemId,
+          name: "Unknown",
+          artist: "",
+          uri: itemId,
+          imageUrl: null,
+        };
+      }
+    };
+
+    // Helper function to load entities in batches with concurrency limit
+    const loadEntitiesBatch = async (itemIds, concurrency = 5) => {
+      const results = [];
+      for (let i = 0; i < itemIds.length; i += concurrency) {
+        const batch = itemIds.slice(i, i + concurrency);
+        const batchResults = await Promise.all(
+          batch.map(itemId => loadEntityForItem(itemId))
+        );
+        results.push(...batchResults);
+      }
+      return results;
+    };
+
+    // Load playlist items with entity details (loads progressively)
     const loadPlaylistItems = async () => {
       if (!userId.value) return;
 
-      // Load Favorites
+      // Load playlists sequentially to avoid overwhelming backend
+      // Start with Favorites
       loadingFavorites.value = true;
       try {
         const favoritesResult = await playlist.getPlaylistItems(
@@ -1346,86 +1337,9 @@ export default {
           "Favorites"
         );
         if (favoritesResult && !favoritesResult.error) {
-          // Load entity details for each item
-          favoritesItems.value = await Promise.all(
-            (favoritesResult || []).slice(0, 20).map(async (itemObj) => {
-              const itemId = itemObj.item || itemObj;
-              try {
-                // Try as external ID first (playlist items are stored as externalId)
-                let entityResponse = await musicDiscovery.getEntityFromId(
-                  itemId
-                );
-
-                // Extract musicEntity from response
-                let musicEntity = null;
-                if (
-                  Array.isArray(entityResponse) &&
-                  entityResponse.length > 0
-                ) {
-                  musicEntity =
-                    entityResponse[0].musicEntity || entityResponse[0];
-                } else if (entityResponse?.musicEntity) {
-                  musicEntity = entityResponse.musicEntity;
-                } else if (entityResponse && !entityResponse.error) {
-                  musicEntity = entityResponse;
-                }
-
-                // If that didn't work, try as URI
-                if (!musicEntity || musicEntity.error) {
-                  try {
-                    entityResponse = await musicDiscovery.getEntityFromUri(
-                      itemId
-                    );
-                    if (
-                      Array.isArray(entityResponse) &&
-                      entityResponse.length > 0
-                    ) {
-                      musicEntity =
-                        entityResponse[0].musicEntity || entityResponse[0];
-                    } else if (entityResponse?.musicEntity) {
-                      musicEntity = entityResponse.musicEntity;
-                    } else if (entityResponse && !entityResponse.error) {
-                      musicEntity = entityResponse;
-                    }
-                  } catch (e) {
-                    console.warn(
-                      `[Profile] Could not load entity by URI for ${itemId}:`,
-                      e
-                    );
-                  }
-                }
-
-                if (musicEntity && !musicEntity.error) {
-                  return {
-                    item: itemId,
-                    name: musicEntity.name || "Unknown",
-                    artist: musicEntity.artistName || musicEntity.artist || "",
-                    uri: musicEntity.uri || musicEntity.externalId || itemId,
-                    imageUrl: musicEntity.imageUrl || null,
-                  };
-                }
-                return {
-                  item: itemId,
-                  name: "Unknown",
-                  artist: "",
-                  uri: itemId,
-                  imageUrl: null,
-                };
-              } catch (err) {
-                console.warn(
-                  `[Profile] Error loading entity for favorite ${itemId}:`,
-                  err
-                );
-                return {
-                  item: itemId,
-                  name: "Unknown",
-                  artist: "",
-                  uri: itemId,
-                  imageUrl: null,
-                };
-              }
-            })
-          );
+          // Load only first 10 items initially (faster initial load)
+          const itemIds = (favoritesResult || []).slice(0, 10).map(itemObj => itemObj.item || itemObj);
+          favoritesItems.value = await loadEntitiesBatch(itemIds, 5);
         } else {
           favoritesItems.value = [];
         }
@@ -1444,86 +1358,9 @@ export default {
           "Listen Later"
         );
         if (listenLaterResult && !listenLaterResult.error) {
-          // Load entity details for each item
-          listenLaterItems.value = await Promise.all(
-            (listenLaterResult || []).slice(0, 20).map(async (itemObj) => {
-              const itemId = itemObj.item || itemObj;
-              try {
-                // Try as external ID first (playlist items are stored as externalId)
-                let entityResponse = await musicDiscovery.getEntityFromId(
-                  itemId
-                );
-
-                // Extract musicEntity from response
-                let musicEntity = null;
-                if (
-                  Array.isArray(entityResponse) &&
-                  entityResponse.length > 0
-                ) {
-                  musicEntity =
-                    entityResponse[0].musicEntity || entityResponse[0];
-                } else if (entityResponse?.musicEntity) {
-                  musicEntity = entityResponse.musicEntity;
-                } else if (entityResponse && !entityResponse.error) {
-                  musicEntity = entityResponse;
-                }
-
-                // If that didn't work, try as URI
-                if (!musicEntity || musicEntity.error) {
-                  try {
-                    entityResponse = await musicDiscovery.getEntityFromUri(
-                      itemId
-                    );
-                    if (
-                      Array.isArray(entityResponse) &&
-                      entityResponse.length > 0
-                    ) {
-                      musicEntity =
-                        entityResponse[0].musicEntity || entityResponse[0];
-                    } else if (entityResponse?.musicEntity) {
-                      musicEntity = entityResponse.musicEntity;
-                    } else if (entityResponse && !entityResponse.error) {
-                      musicEntity = entityResponse;
-                    }
-                  } catch (e) {
-                    console.warn(
-                      `[Profile] Could not load entity by URI for ${itemId}:`,
-                      e
-                    );
-                  }
-                }
-
-                if (musicEntity && !musicEntity.error) {
-                  return {
-                    item: itemId,
-                    name: musicEntity.name || "Unknown",
-                    artist: musicEntity.artistName || musicEntity.artist || "",
-                    uri: musicEntity.uri || musicEntity.externalId || itemId,
-                    imageUrl: musicEntity.imageUrl || null,
-                  };
-                }
-                return {
-                  item: itemId,
-                  name: "Unknown",
-                  artist: "",
-                  uri: itemId,
-                  imageUrl: null,
-                };
-              } catch (err) {
-                console.warn(
-                  `[Profile] Error loading entity for listen later ${itemId}:`,
-                  err
-                );
-                return {
-                  item: itemId,
-                  name: "Unknown",
-                  artist: "",
-                  uri: itemId,
-                  imageUrl: null,
-                };
-              }
-            })
-          );
+          // Load only first 10 items initially (faster initial load)
+          const itemIds = (listenLaterResult || []).slice(0, 10).map(itemObj => itemObj.item || itemObj);
+          listenLaterItems.value = await loadEntitiesBatch(itemIds, 5);
         } else {
           listenLaterItems.value = [];
         }
@@ -1542,89 +1379,9 @@ export default {
           "Friend Recommendations"
         );
         if (friendRecommendationsResult && !friendRecommendationsResult.error) {
-          // Load entity details for each item
-          friendRecommendationsItems.value = await Promise.all(
-            (friendRecommendationsResult || [])
-              .slice(0, 20)
-              .map(async (itemObj) => {
-                const itemId = itemObj.item || itemObj;
-                try {
-                  // Try as external ID first (playlist items are stored as externalId)
-                  let entityResponse = await musicDiscovery.getEntityFromId(
-                    itemId
-                  );
-
-                  // Extract musicEntity from response
-                  let musicEntity = null;
-                  if (
-                    Array.isArray(entityResponse) &&
-                    entityResponse.length > 0
-                  ) {
-                    musicEntity =
-                      entityResponse[0].musicEntity || entityResponse[0];
-                  } else if (entityResponse?.musicEntity) {
-                    musicEntity = entityResponse.musicEntity;
-                  } else if (entityResponse && !entityResponse.error) {
-                    musicEntity = entityResponse;
-                  }
-
-                  // If that didn't work, try as URI
-                  if (!musicEntity || musicEntity.error) {
-                    try {
-                      entityResponse = await musicDiscovery.getEntityFromUri(
-                        itemId
-                      );
-                      if (
-                        Array.isArray(entityResponse) &&
-                        entityResponse.length > 0
-                      ) {
-                        musicEntity =
-                          entityResponse[0].musicEntity || entityResponse[0];
-                      } else if (entityResponse?.musicEntity) {
-                        musicEntity = entityResponse.musicEntity;
-                      } else if (entityResponse && !entityResponse.error) {
-                        musicEntity = entityResponse;
-                      }
-                    } catch (e) {
-                      console.warn(
-                        `[Profile] Could not load entity by URI for ${itemId}:`,
-                        e
-                      );
-                    }
-                  }
-
-                  if (musicEntity && !musicEntity.error) {
-                    return {
-                      item: itemId,
-                      name: musicEntity.name || "Unknown",
-                      artist:
-                        musicEntity.artistName || musicEntity.artist || "",
-                      uri: musicEntity.uri || musicEntity.externalId || itemId,
-                      imageUrl: musicEntity.imageUrl || null,
-                    };
-                  }
-                  return {
-                    item: itemId,
-                    name: "Unknown",
-                    artist: "",
-                    uri: itemId,
-                    imageUrl: null,
-                  };
-                } catch (err) {
-                  console.warn(
-                    `[Profile] Error loading entity for friend recommendation ${itemId}:`,
-                    err
-                  );
-                  return {
-                    item: itemId,
-                    name: "Unknown",
-                    artist: "",
-                    uri: itemId,
-                    imageUrl: null,
-                  };
-                }
-              })
-          );
+          // Load only first 10 items initially (faster initial load)
+          const itemIds = (friendRecommendationsResult || []).slice(0, 10).map(itemObj => itemObj.item || itemObj);
+          friendRecommendationsItems.value = await loadEntitiesBatch(itemIds, 5);
         } else {
           friendRecommendationsItems.value = [];
         }
@@ -1650,51 +1407,43 @@ export default {
           return;
         }
 
-        // Load usernames and thumbnails for each friend
-        const friendsWithNames = await Promise.all(
-          (result || []).map(async (friendItem) => {
-            try {
-              // Load username and thumbnail in parallel
-              const [usernameResult, thumbnailResult] = await Promise.all([
-                auth.getUsername(friendItem.friend),
-                userProfile.getThumbnail(friendItem.friend),
-              ]);
+        // Load usernames and thumbnails for friends with concurrency limit
+        const friendIds = (result || []).map(f => f.friend);
+        
+        // Load usernames and thumbnails in parallel with concurrency limit
+        const [usernameResults, thumbnailResults] = await Promise.all([
+          Promise.all(
+            friendIds.map(async (friendId) => {
+              try {
+                const usernameResult = await auth.getUsername(friendId);
+                const usernameData =
+                  Array.isArray(usernameResult) && usernameResult.length > 0
+                    ? usernameResult[0]
+                    : usernameResult;
+                const username =
+                  usernameData && !usernameData.error && usernameData.username
+                    ? usernameData.username
+                    : friendId;
+                return { friendId, username };
+              } catch (error) {
+                return { friendId, username: friendId };
+              }
+            })
+          ),
+          loadThumbnailsBatch(friendIds, 10) // Limit to 10 concurrent requests
+        ]);
 
-              // API returns an array: [{ "username": "String" }]
-              const usernameData =
-                Array.isArray(usernameResult) && usernameResult.length > 0
-                  ? usernameResult[0]
-                  : usernameResult;
-              const username =
-                usernameData && !usernameData.error && usernameData.username
-                  ? usernameData.username
-                  : friendItem.friend;
-
-              // Extract thumbnail URL
-              const thumbnailData =
-                Array.isArray(thumbnailResult) && thumbnailResult.length > 0
-                  ? thumbnailResult[0]
-                  : thumbnailResult;
-              const thumbnailUrl = thumbnailData?.thumbnailUrl || null;
-
-              return {
-                ...friendItem,
-                friendName: username,
-                friendThumbnail: thumbnailUrl,
-              };
-            } catch (error) {
-              console.error(
-                `[Profile] Error loading username/thumbnail for friend ${friendItem.friend}:`,
-                error
-              );
-              return {
-                ...friendItem,
-                friendName: friendItem.friend,
-                friendThumbnail: null,
-              };
-            }
-          })
+        // Build username map
+        const usernameMap = new Map(
+          usernameResults.map(r => [r.friendId, r.username])
         );
+
+        // Combine results
+        const friendsWithNames = (result || []).map((friendItem) => ({
+          ...friendItem,
+          friendName: usernameMap.get(friendItem.friend) || friendItem.friend,
+          friendThumbnail: thumbnailResults.get(friendItem.friend) || null,
+        }));
 
         friends.value = friendsWithNames;
       } catch (error) {
@@ -1716,51 +1465,40 @@ export default {
           userId.value
         );
         if (incomingResult && !incomingResult.error) {
-          const incomingWithNames = await Promise.all(
-            (incomingResult || []).map(async (request) => {
-              try {
-                // Load username and thumbnail in parallel
-                const [usernameResult, thumbnailResult] = await Promise.all([
-                  auth.getUsername(request.requester),
-                  userProfile.getThumbnail(request.requester),
-                ]);
+          const requesterIds = (incomingResult || []).map(r => r.requester);
+          
+          // Load usernames and thumbnails with concurrency limit
+          const [usernameResults, thumbnailResults] = await Promise.all([
+            Promise.all(
+              requesterIds.map(async (requesterId) => {
+                try {
+                  const usernameResult = await auth.getUsername(requesterId);
+                  const usernameData =
+                    Array.isArray(usernameResult) && usernameResult.length > 0
+                      ? usernameResult[0]
+                      : usernameResult;
+                  const username =
+                    usernameData && !usernameData.error && usernameData.username
+                      ? usernameData.username
+                      : requesterId;
+                  return { requesterId, username };
+                } catch (error) {
+                  return { requesterId, username: requesterId };
+                }
+              })
+            ),
+            loadThumbnailsBatch(requesterIds, 10)
+          ]);
 
-                // API returns an array: [{ "username": "String" }]
-                const usernameData =
-                  Array.isArray(usernameResult) && usernameResult.length > 0
-                    ? usernameResult[0]
-                    : usernameResult;
-                const username =
-                  usernameData && !usernameData.error && usernameData.username
-                    ? usernameData.username
-                    : request.requester;
-
-                // Extract thumbnail URL
-                const thumbnailData =
-                  Array.isArray(thumbnailResult) && thumbnailResult.length > 0
-                    ? thumbnailResult[0]
-                    : thumbnailResult;
-                const thumbnailUrl = thumbnailData?.thumbnailUrl || null;
-
-                return {
-                  ...request,
-                  requesterName: username,
-                  requesterThumbnail: thumbnailUrl,
-                };
-              } catch (error) {
-                console.error(
-                  `[Profile] Error loading username/thumbnail for requester ${request.requester}:`,
-                  error
-                );
-                return {
-                  ...request,
-                  requesterName: request.requester,
-                  requesterThumbnail: null,
-                };
-              }
-            })
+          const usernameMap = new Map(
+            usernameResults.map(r => [r.requesterId, r.username])
           );
-          incomingRequests.value = incomingWithNames;
+
+          incomingRequests.value = (incomingResult || []).map((request) => ({
+            ...request,
+            requesterName: usernameMap.get(request.requester) || request.requester,
+            requesterThumbnail: thumbnailResults.get(request.requester) || null,
+          }));
         } else {
           incomingRequests.value = [];
         }
@@ -1770,51 +1508,40 @@ export default {
           userId.value
         );
         if (outgoingResult && !outgoingResult.error) {
-          const outgoingWithNames = await Promise.all(
-            (outgoingResult || []).map(async (request) => {
-              try {
-                // Load username and thumbnail in parallel
-                const [usernameResult, thumbnailResult] = await Promise.all([
-                  auth.getUsername(request.target),
-                  userProfile.getThumbnail(request.target),
-                ]);
+          const targetIds = (outgoingResult || []).map(r => r.target);
+          
+          // Load usernames and thumbnails with concurrency limit
+          const [usernameResults, thumbnailResults] = await Promise.all([
+            Promise.all(
+              targetIds.map(async (targetId) => {
+                try {
+                  const usernameResult = await auth.getUsername(targetId);
+                  const usernameData =
+                    Array.isArray(usernameResult) && usernameResult.length > 0
+                      ? usernameResult[0]
+                      : usernameResult;
+                  const username =
+                    usernameData && !usernameData.error && usernameData.username
+                      ? usernameData.username
+                      : targetId;
+                  return { targetId, username };
+                } catch (error) {
+                  return { targetId, username: targetId };
+                }
+              })
+            ),
+            loadThumbnailsBatch(targetIds, 10)
+          ]);
 
-                // API returns an array: [{ "username": "String" }]
-                const usernameData =
-                  Array.isArray(usernameResult) && usernameResult.length > 0
-                    ? usernameResult[0]
-                    : usernameResult;
-                const username =
-                  usernameData && !usernameData.error && usernameData.username
-                    ? usernameData.username
-                    : request.target;
-
-                // Extract thumbnail URL
-                const thumbnailData =
-                  Array.isArray(thumbnailResult) && thumbnailResult.length > 0
-                    ? thumbnailResult[0]
-                    : thumbnailResult;
-                const thumbnailUrl = thumbnailData?.thumbnailUrl || null;
-
-                return {
-                  ...request,
-                  targetName: username,
-                  targetThumbnail: thumbnailUrl,
-                };
-              } catch (error) {
-                console.error(
-                  `[Profile] Error loading username/thumbnail for target ${request.target}:`,
-                  error
-                );
-                return {
-                  ...request,
-                  targetName: request.target,
-                  targetThumbnail: null,
-                };
-              }
-            })
+          const usernameMap = new Map(
+            usernameResults.map(r => [r.targetId, r.username])
           );
-          outgoingRequests.value = outgoingWithNames;
+
+          outgoingRequests.value = (outgoingResult || []).map((request) => ({
+            ...request,
+            targetName: usernameMap.get(request.target) || request.target,
+            targetThumbnail: thumbnailResults.get(request.target) || null,
+          }));
         } else {
           outgoingRequests.value = [];
         }
@@ -1899,12 +1626,7 @@ export default {
           // Load thumbnail for searched user
           let thumbnailUrl = null;
           try {
-            const thumbnailResult = await userProfile.getThumbnail(foundUserId);
-            const thumbnailData =
-              Array.isArray(thumbnailResult) && thumbnailResult.length > 0
-                ? thumbnailResult[0]
-                : thumbnailResult;
-            thumbnailUrl = thumbnailData?.thumbnailUrl || null;
+            thumbnailUrl = await getThumbnail(foundUserId);
           } catch (thumbError) {
             console.warn(
               "[Profile] Error loading thumbnail for searched user:",
@@ -2265,18 +1987,33 @@ export default {
           // No userId available
           return;
         }
+        // Load critical data first (username, thumbnail, bio) - show page immediately
         await Promise.all([
           loadUsername(),
           loadThumbnail(),
           loadBio(),
+        ]);
+        
+        // Load other data progressively (non-blocking)
+        // Load reviews, playlist counts, and friends in parallel
+        Promise.all([
           loadReviews(),
           loadPlaylistCounts(),
-          loadPlaylistItems(),
-          loadFriends(), // Load friends for all profiles
-        ]);
-        // Only load friend requests for own profile
+          loadFriends(),
+        ]).catch(err => {
+          console.warn("[Profile] Error loading secondary data:", err);
+        });
+        
+        // Load playlist items separately (can be slow, so load after page is visible)
+        loadPlaylistItems().catch(err => {
+          console.warn("[Profile] Error loading playlist items:", err);
+        });
+        
+        // Load friend requests last (only for own profile)
         if (isOwnProfile.value) {
-          await loadFriendRequests();
+          loadFriendRequests().catch(err => {
+            console.warn("[Profile] Error loading friend requests:", err);
+          });
         } else {
           incomingRequests.value = [];
           outgoingRequests.value = [];
@@ -2900,7 +2637,7 @@ export default {
   font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .upvote-btn:hover:not(:disabled) {
@@ -2910,14 +2647,18 @@ export default {
 }
 
 .upvote-btn.is-upvoted {
-  background: rgba(74, 158, 255, 0.1);
-  border-color: rgba(74, 158, 255, 0.3);
-  color: #4a9eff;
+  background: rgba(255, 107, 157, 0.2);
+  border-color: rgba(255, 107, 157, 0.5);
+  color: #ff6b9d;
+  box-shadow: 0 0 12px rgba(255, 107, 157, 0.3);
+  transform: scale(1.05);
 }
 
 .upvote-btn.is-upvoted:hover:not(:disabled) {
-  background: rgba(74, 158, 255, 0.2);
-  border-color: rgba(74, 158, 255, 0.5);
+  background: rgba(255, 107, 157, 0.3);
+  border-color: #ff6b9d;
+  box-shadow: 0 0 16px rgba(255, 107, 157, 0.4);
+  transform: scale(1.08);
 }
 
 .upvote-btn:disabled {

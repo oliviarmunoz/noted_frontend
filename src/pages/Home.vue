@@ -200,6 +200,7 @@
                 :src="review.reviewerThumbnail"
                 :alt="review.reviewer"
                 class="user-avatar-small"
+                loading="lazy"
               />
               <div v-else class="user-icon">👤</div>
               <div class="review-meta">
@@ -283,14 +284,14 @@
                 <svg
                   class="upvote-icon"
                   viewBox="0 0 24 24"
-                  fill="none"
+                  :fill="review.hasUpvoted ? 'currentColor' : 'none'"
                   stroke="currentColor"
                   stroke-width="2"
                   stroke-linecap="round"
                   stroke-linejoin="round"
                   xmlns="http://www.w3.org/2000/svg"
                 >
-                  <path d="M12 19V5M5 12l7-7 7 7" />
+                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
                 </svg>
                 <span class="upvote-count">{{ review.upvoteCount || 0 }}</span>
               </button>
@@ -309,6 +310,7 @@
                   :src="comment.commenterThumbnail"
                   :alt="comment.commenterUsername || comment.commenter"
                   class="comment-avatar-small"
+                  loading="lazy"
                 />
                 <span v-else class="comment-icon-small">👤</span>
                 <span
@@ -338,6 +340,7 @@
                 :src="currentUserThumbnail"
                 :alt="'Your profile'"
                 class="comment-icon-avatar"
+                loading="lazy"
               />
               <span v-else class="comment-icon">👤</span>
               <input
@@ -377,6 +380,7 @@ import { usePlaylists } from "../composables/usePlaylists.js";
 import { useToast } from "../composables/useToast.js";
 import { usePlaylistEvents } from "../composables/usePlaylistEvents.js";
 import { useAuth } from "../composables/useAuth.js";
+import { loadThumbnailsBatch, getThumbnail } from "../composables/useThumbnailCache.js";
 import {
   friending,
   review,
@@ -1085,21 +1089,9 @@ export default {
     await this.loadFeed();
   },
   methods: {
-    // Helper method to load thumbnail for a user
+    // Helper method to load thumbnail for a user (uses cache)
     async loadUserThumbnail(userId) {
-      if (!userId) return null;
-      try {
-        const result = await userProfile.getThumbnail(userId);
-        const thumbnailData =
-          Array.isArray(result) && result.length > 0 ? result[0] : result;
-        return thumbnailData?.thumbnailUrl || null;
-      } catch (error) {
-        console.warn(
-          `[Home] Error loading thumbnail for user ${userId}:`,
-          error
-        );
-        return null;
-      }
+      return await getThumbnail(userId);
     },
 
     // Helper method to enhance comments with usernames and thumbnails
@@ -1108,49 +1100,51 @@ export default {
         return [];
       }
 
-      return await Promise.all(
-        comments.map(async (comment) => {
-          let commenterUsername = comment.commenter;
-          let commenterThumbnail = null;
+      // Get unique commenter IDs
+      const uniqueCommenterIds = [...new Set(
+        comments.map(c => c.commenter).filter(Boolean)
+      )];
 
-          if (comment.commenter) {
+      // Load all usernames and thumbnails in parallel with concurrency limit
+      const [usernameResults, thumbnailResults] = await Promise.all([
+        Promise.all(
+          uniqueCommenterIds.map(async (commenterId) => {
             try {
-              // Load username and thumbnail in parallel
-              const [usernameResponse, thumbnail] = await Promise.all([
-                auth.getUsername(comment.commenter),
-                this.loadUserThumbnail(comment.commenter),
-              ]);
-
-              // _getUsername returns an array: [{ username: "String" }]
+              const usernameResponse = await auth.getUsername(commenterId).catch(() => null);
+              let username = commenterId;
               if (usernameResponse && !usernameResponse.error) {
                 if (
                   Array.isArray(usernameResponse) &&
                   usernameResponse.length > 0
                 ) {
-                  commenterUsername =
-                    usernameResponse[0].username || comment.commenter;
+                  username = usernameResponse[0].username || commenterId;
                 } else if (usernameResponse.username) {
-                  commenterUsername = usernameResponse.username;
+                  username = usernameResponse.username;
                 }
               }
-
-              commenterThumbnail = thumbnail;
+              return { commenterId, username };
             } catch (err) {
-              console.warn(
-                `Could not get username/thumbnail for commenter ${comment.commenter}:`,
-                err
-              );
-              // Keep the commenter ID as fallback
-              commenterUsername = comment.commenter;
+              return { commenterId, username: commenterId };
             }
-          }
-          return {
-            ...comment,
-            commenterUsername: commenterUsername,
-            commenterThumbnail: commenterThumbnail,
-          };
-        })
+          })
+        ),
+        loadThumbnailsBatch(uniqueCommenterIds, 10)
+      ]);
+
+      // Build a map for quick lookup
+      const usernameMap = new Map(
+        usernameResults.map(r => [r.commenterId, r.username])
       );
+
+      // Map comments with cached data
+      return comments.map((comment) => {
+        const commenterId = comment.commenter;
+        return {
+          ...comment,
+          commenterUsername: commenterId ? (usernameMap.get(commenterId) || commenterId) : comment.commenter,
+          commenterThumbnail: commenterId ? (thumbnailResults.get(commenterId) || null) : null,
+        };
+      });
     },
     async loadFeed() {
       this.loading = true;
@@ -1179,196 +1173,157 @@ export default {
         // Include current user in the list of users to fetch reviews from
         const userIdsToFetch = [currentUser, ...friendIds];
 
-        // Get reviews from current user and all friends
-        const allReviews = [];
-
-        for (const userId of userIdsToFetch) {
+        // Get reviews from all users in parallel first
+        const allUserReviewsPromises = userIdsToFetch.map(async (userId) => {
           try {
             const userReviewsResponse = await review.getUserReviews(userId);
-
             if (userReviewsResponse && userReviewsResponse.error) {
               console.warn(
                 `Error fetching reviews for user ${userId}:`,
                 userReviewsResponse.error
               );
-              continue;
+              return [];
             }
-
-            const userReviews = userReviewsResponse || [];
-
-            // Get entity details for each review
-            // For each review, get the target field and use it to get the music entity
-            for (const reviewData of userReviews) {
-              try {
-                // Get the target from the review (API spec uses "target", not "item")
-                const target = reviewData.item;
-                let musicEntity = null;
-
-                // Get the music entity information using getEntityFromId with the target
-                if (target) {
-                  try {
-                    const entityResponse = await musicDiscovery.getEntity(
-                      target
-                    );
-                    console.log("entityResponse", entityResponse);
-
-                    if (entityResponse && entityResponse.error) {
-                      console.warn(
-                        `Error loading entity for target ${target}:`,
-                        entityResponse.error
-                      );
-                    } else if (entityResponse) {
-                      // Extract musicEntity from the response
-                      // According to API spec, _getEntityFromId returns:
-                      // [{ "musicEntity": {...} }]
-                      if (
-                        Array.isArray(entityResponse) &&
-                        entityResponse.length > 0
-                      ) {
-                        // Response is an array, get first element
-                        const firstResponse = entityResponse[0];
-                        musicEntity =
-                          firstResponse.musicEntity || firstResponse;
-                      } else if (entityResponse.musicEntity) {
-                        // Response has musicEntity property
-                        musicEntity = entityResponse.musicEntity;
-                      } else if (
-                        entityResponse._id ||
-                        entityResponse.name ||
-                        entityResponse.externalId
-                      ) {
-                        // Response is the entity directly (fallback)
-                        musicEntity = entityResponse;
-                      }
-                    }
-                  } catch (e) {
-                    console.warn(
-                      `Error getting entity info for target ${target}:`,
-                      e
-                    );
-                  }
-                }
-
-                // Get reviewer username and thumbnail using APIs
-                let reviewerName = userId;
-                let reviewerThumbnail = null;
-                try {
-                  // Load username and thumbnail in parallel
-                  const [usernameResponse, thumbnail] = await Promise.all([
-                    auth.getUsername(userId),
-                    this.loadUserThumbnail(userId),
-                  ]);
-
-                  // _getUsername returns an array: [{ username: "String" }]
-                  if (usernameResponse && !usernameResponse.error) {
-                    if (
-                      Array.isArray(usernameResponse) &&
-                      usernameResponse.length > 0
-                    ) {
-                      reviewerName = usernameResponse[0].username || userId;
-                    } else if (usernameResponse.username) {
-                      reviewerName = usernameResponse.username;
-                    }
-                  }
-
-                  reviewerThumbnail = thumbnail;
-                } catch (e) {
-                  console.warn(
-                    `Could not get username/thumbnail for user ${userId}:`,
-                    e
-                  );
-                }
-
-                // Extract URI and other info from musicEntity
-                const songUri =
-                  musicEntity?.uri || musicEntity?.externalId || target;
-                const songName = musicEntity?.name || "Unknown Song";
-                const songArtist =
-                  musicEntity?.artistName ||
-                  musicEntity?.artist ||
-                  "Unknown Artist";
-                const songImageUrl = musicEntity?.imageUrl || null;
-                const songAlbum =
-                  musicEntity?.album || musicEntity?.albumName || null;
-                const songExternalURL = musicEntity?.externalURL || null;
-
-                // Get review ID
-                const reviewId = reviewData.review || reviewData._id;
-                console.log("Review data structure:", {
-                  reviewData,
-                  reviewId,
-                  reviewField: reviewData.review,
-                  _idField: reviewData._id,
-                });
-
-                // Load comments for this review
-                let comments = [];
-                if (reviewId) {
-                  try {
-                    const reviewComments = await review.getReviewComments(
-                      reviewId
-                    );
-                    if (reviewComments && reviewComments.error) {
-                      console.error(
-                        `Error loading comments:`,
-                        reviewComments.error
-                      );
-                    } else {
-                      // Enhance comments with usernames
-                      comments = await this.enhanceCommentsWithUsernames(
-                        reviewComments || []
-                      );
-                    }
-                  } catch (err) {
-                    console.error(
-                      `Error loading comments for review ${reviewId}:`,
-                      err
-                    );
-                  }
-                }
-
-                // Initialize upvote data with defaults - will be loaded in batches after feed loads
-                // This prevents blocking the feed load with too many parallel API calls
-                let upvoteCount = 0;
-                let hasUpvoted = false;
-
-                // Push review with complete music entity information
-                allReviews.push({
-                  id: reviewId,
-                  reviewer: reviewerName,
-                  reviewerId: userId, // Store userId for navigation
-                  reviewerThumbnail: reviewerThumbnail, // Store thumbnail URL
-                  song: songName,
-                  artist: songArtist,
-                  album: songAlbum,
-                  imageUrl: songImageUrl,
-                  rating: reviewData.rating || 0,
-                  comment: reviewData.notes || "",
-                  songId: target,
-                  songUri: songUri,
-                  uri: songUri,
-                  item: target, // Keep for backward compatibility
-                  musicEntity: musicEntity,
-                  comments: comments,
-                  date: reviewData.date, // Store date for sorting
-                  externalURL: songExternalURL, // Add external URL for Spotify link
-                  upvoteCount: upvoteCount,
-                  hasUpvoted: hasUpvoted,
-                });
-              } catch (err) {
-                console.warn(
-                  `Error processing review ${reviewData.review}:`,
-                  err
-                );
-              }
-            }
+            return (userReviewsResponse || []).map(review => ({ ...review, userId }));
           } catch (err) {
             console.warn(`Error fetching reviews for user ${userId}:`, err);
+            return [];
           }
-        }
+        });
+
+        const allUserReviewsArrays = await Promise.all(allUserReviewsPromises);
+        const allRawReviews = allUserReviewsArrays.flat();
+
+        // Pre-fetch all unique user usernames and thumbnails in parallel
+        const uniqueUserIds = [...new Set(allRawReviews.map(r => r.userId).filter(Boolean))];
+        const userDataCache = {};
+        
+        // Load usernames and thumbnails in parallel (with concurrency limit for thumbnails)
+        const [usernameResults, thumbnailResults] = await Promise.all([
+          // Load all usernames in parallel
+          Promise.all(
+            uniqueUserIds.map(async (userId) => {
+              try {
+                const usernameResponse = await auth.getUsername(userId).catch(() => null);
+                
+                let username = userId;
+                if (usernameResponse && !usernameResponse.error) {
+                  if (Array.isArray(usernameResponse) && usernameResponse.length > 0) {
+                    username = usernameResponse[0].username || userId;
+                  } else if (usernameResponse.username) {
+                    username = usernameResponse.username;
+                  }
+                }
+                
+                return { userId, username };
+              } catch (err) {
+                return { userId, username: userId };
+              }
+            })
+          ),
+          // Load thumbnails with concurrency limit (10 at a time)
+          loadThumbnailsBatch(uniqueUserIds, 10)
+        ]);
+
+        // Build user data cache from results
+        usernameResults.forEach(({ userId, username }) => {
+          userDataCache[userId] = {
+            username,
+            thumbnail: thumbnailResults.get(userId) || null,
+          };
+        });
+
+        // Pre-fetch all unique entity data in parallel
+        const uniqueTargets = [...new Set(allRawReviews.map(r => r.item).filter(Boolean))];
+        const entityCache = {};
+        
+        await Promise.all(
+          uniqueTargets.map(async (target) => {
+            try {
+              const entityResponse = await musicDiscovery.getEntity(target).catch(() => null);
+              if (entityResponse && !entityResponse.error) {
+                let musicEntity = null;
+                if (Array.isArray(entityResponse) && entityResponse.length > 0) {
+                  musicEntity = entityResponse[0].musicEntity || entityResponse[0];
+                } else if (entityResponse.musicEntity) {
+                  musicEntity = entityResponse.musicEntity;
+                } else if (entityResponse._id || entityResponse.name || entityResponse.externalId) {
+                  musicEntity = entityResponse;
+                }
+                entityCache[target] = musicEntity;
+              }
+            } catch (err) {
+              // Cache miss, will handle in review processing
+            }
+          })
+        );
+
+        // Now process all reviews in parallel (using cached data, no API calls)
+        const allReviews = await Promise.all(
+          allRawReviews.map(async (reviewData) => {
+            const userId = reviewData.userId;
+            try {
+              // Get the target from the review (API spec uses "target", not "item")
+              const target = reviewData.item;
+              const reviewId = reviewData.review || reviewData._id;
+
+              // Use cached user data
+              const userData = userDataCache[userId] || { username: userId, thumbnail: null };
+              const reviewerName = userData.username;
+              const reviewerThumbnail = userData.thumbnail;
+
+              // Use cached entity data
+              const musicEntity = entityCache[target] || null;
+
+              // Extract URI and other info from musicEntity
+              const songUri = musicEntity?.uri || musicEntity?.externalId || target;
+              const songName = musicEntity?.name || "Unknown Song";
+              const songArtist = musicEntity?.artistName || musicEntity?.artist || "Unknown Artist";
+              const songImageUrl = musicEntity?.imageUrl || null;
+              const songAlbum = musicEntity?.album || musicEntity?.albumName || null;
+              const songExternalURL = musicEntity?.externalURL || null;
+
+              // Defer comment loading - will load after feed is displayed
+              let comments = [];
+
+              // Initialize upvote data with defaults - will be loaded in batches after feed loads
+              let upvoteCount = 0;
+              let hasUpvoted = false;
+
+              return {
+                id: reviewId,
+                reviewer: reviewerName,
+                reviewerId: userId,
+                reviewerThumbnail: reviewerThumbnail,
+                song: songName,
+                artist: songArtist,
+                album: songAlbum,
+                imageUrl: songImageUrl,
+                rating: reviewData.rating || 0,
+                comment: reviewData.notes || "",
+                songId: target,
+                songUri: songUri,
+                uri: songUri,
+                item: target,
+                musicEntity: musicEntity,
+                comments: comments,
+                date: reviewData.date,
+                externalURL: songExternalURL,
+                upvoteCount: upvoteCount,
+                hasUpvoted: hasUpvoted,
+              };
+            } catch (err) {
+              console.warn(`Error processing review ${reviewData.review}:`, err);
+              return null;
+            }
+          })
+        );
+
+        // Filter out any null reviews (from errors)
+        const validReviews = allReviews.filter((r) => r !== null);
 
         // Sort reviews by most recent (by date)
-        allReviews.sort((a, b) => {
+        validReviews.sort((a, b) => {
           // If both have dates, sort by date (most recent first)
           if (a.date && b.date) {
             const dateA = new Date(a.date);
@@ -1383,18 +1338,68 @@ export default {
         });
 
         // Store all reviews and limit displayed ones
-        this.allReviews = allReviews;
+        this.allReviews = validReviews;
         this.reviewsLimit = 10;
-        this.reviewsHasMore = allReviews.length > this.reviewsLimit;
-        this.reviews = allReviews.slice(0, this.reviewsLimit);
+        this.reviewsHasMore = validReviews.length > this.reviewsLimit;
+        this.reviews = validReviews.slice(0, this.reviewsLimit);
         
-        // Load upvote data in batches after feed is displayed (non-blocking)
+        // Load comments and upvote data in batches after feed is displayed (non-blocking)
+        // Note: Thumbnails are already loaded above, so we skip loadThumbnailsInBatches
+        this.loadCommentsInBatches();
         this.loadUpvoteDataInBatches();
       } catch (err) {
         console.error("Error loading feed:", err);
         this.error = err.message || "Failed to load feed";
       } finally {
         this.loading = false;
+      }
+    },
+    // This method is no longer needed as thumbnails are loaded during initial feed load
+    // Keeping for backwards compatibility but it's now a no-op
+    async loadThumbnailsInBatches() {
+      // Thumbnails are now loaded during loadFeed() - this is kept for compatibility
+      return;
+    },
+    async loadCommentsInBatches() {
+      if (!this.reviews || this.reviews.length === 0) {
+        return;
+      }
+
+      // Process reviews in batches of 5 to avoid overwhelming the backend
+      const batchSize = 5;
+      const reviewsToProcess = this.reviews.filter(r => r.id && !r.commentsLoaded);
+      
+      for (let i = 0; i < reviewsToProcess.length; i += batchSize) {
+        const batch = reviewsToProcess.slice(i, i + batchSize);
+        
+        // Process batch in parallel
+        await Promise.all(
+          batch.map(async (review) => {
+            if (!review.id) return;
+            
+            try {
+              const reviewComments = await review.getReviewComments(review.id).catch(err => {
+                console.warn(`[Home] Error loading comments for review ${review.id}:`, err);
+                return null;
+              });
+
+              if (reviewComments && !reviewComments.error) {
+                review.comments = await this.enhanceCommentsWithUsernames(reviewComments || []);
+              }
+              
+              review.commentsLoaded = true;
+            } catch (err) {
+              console.warn(`[Home] Error loading comments for review ${review.id}:`, err);
+              review.comments = review.comments || [];
+              review.commentsLoaded = true;
+            }
+          })
+        );
+        
+        // Small delay between batches to avoid overwhelming the backend
+        if (i + batchSize < reviewsToProcess.length) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
       }
     },
     async loadUpvoteDataInBatches() {
@@ -2040,7 +2045,7 @@ export default {
   font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .upvote-btn:hover:not(:disabled) {
@@ -2050,14 +2055,18 @@ export default {
 }
 
 .upvote-btn.is-upvoted {
-  background: rgba(74, 158, 255, 0.1);
-  border-color: rgba(74, 158, 255, 0.3);
-  color: #4a9eff;
+  background: rgba(255, 107, 157, 0.2);
+  border-color: rgba(255, 107, 157, 0.5);
+  color: #ff6b9d;
+  box-shadow: 0 0 12px rgba(255, 107, 157, 0.3);
+  transform: scale(1.05);
 }
 
 .upvote-btn.is-upvoted:hover:not(:disabled) {
-  background: rgba(74, 158, 255, 0.2);
-  border-color: rgba(74, 158, 255, 0.5);
+  background: rgba(255, 107, 157, 0.3);
+  border-color: #ff6b9d;
+  box-shadow: 0 0 16px rgba(255, 107, 157, 0.4);
+  transform: scale(1.08);
 }
 
 .upvote-btn:disabled {

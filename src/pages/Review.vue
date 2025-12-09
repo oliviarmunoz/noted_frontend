@@ -202,6 +202,7 @@
                 :src="review.reviewerThumbnail"
                 :alt="review.username || review.userId"
                 class="reviewer-avatar-small"
+                loading="lazy"
               />
               <span v-else class="reviewer-icon-small">👤</span>
               <span
@@ -239,14 +240,14 @@
                 <svg
                   class="upvote-icon"
                   viewBox="0 0 24 24"
-                  fill="none"
+                  :fill="review.hasUpvoted ? 'currentColor' : 'none'"
                   stroke="currentColor"
                   stroke-width="2"
                   stroke-linecap="round"
                   stroke-linejoin="round"
                   xmlns="http://www.w3.org/2000/svg"
                 >
-                  <path d="M12 19V5M5 12l7-7 7 7" />
+                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
                 </svg>
                 <span class="upvote-count">{{ review.upvoteCount || 0 }}</span>
               </button>
@@ -265,6 +266,7 @@
                   :src="comment.commenterThumbnail"
                   :alt="comment.commenterUsername || comment.commenter"
                   class="comment-avatar-small"
+                  loading="lazy"
                 />
                 <span v-else class="comment-icon-small">👤</span>
                 <span
@@ -371,6 +373,7 @@
                         :src="friend.friendThumbnail"
                         :alt="friend.friendName || friend.friend"
                         class="friend-avatar-image"
+                        loading="lazy"
                       />
                       <span v-else class="friend-icon">👤</span>
                     </div>
@@ -457,6 +460,7 @@ import { usePlaylists } from "../composables/usePlaylists.js";
 import { useToast } from "../composables/useToast.js";
 import { usePlaylistEvents } from "../composables/usePlaylistEvents.js";
 import { useAuth } from "../composables/useAuth.js";
+import { loadThumbnailsBatch, getThumbnail } from "../composables/useThumbnailCache.js";
 
 export default {
   name: "Review",
@@ -609,68 +613,61 @@ export default {
       }
     };
 
-    // Helper function to load thumbnail for a user
+    // Helper function to load thumbnail for a user (uses cache)
     const loadUserThumbnail = async (userId) => {
-      if (!userId) return null;
-      try {
-        const result = await userProfile.getThumbnail(userId);
-        const thumbnailData =
-          Array.isArray(result) && result.length > 0 ? result[0] : result;
-        return thumbnailData?.thumbnailUrl || thumbnailData?.thumbnail || null;
-      } catch (error) {
-        console.warn(
-          `[Review] Error loading thumbnail for user ${userId}:`,
-          error
-        );
-        return null;
-      }
+      return await getThumbnail(userId);
     };
 
     // Helper function to fetch usernames and thumbnails for comments
     const enrichCommentsWithUsernames = async (comments) => {
       if (!comments || comments.length === 0) return [];
 
-      return await Promise.all(
-        comments.map(async (comment) => {
-          let commenterUsername = comment.commenter;
-          let commenterThumbnail = null;
-          if (comment.commenter) {
+      // Get unique commenter IDs
+      const uniqueCommenterIds = [...new Set(
+        comments.map(c => c.commenter).filter(Boolean)
+      )];
+
+      // Load all usernames and thumbnails in parallel with concurrency limit
+      const [usernameResults, thumbnailResults] = await Promise.all([
+        Promise.all(
+          uniqueCommenterIds.map(async (commenterId) => {
             try {
-              // Load username and thumbnail in parallel
-              const [usernameResponse, thumbnail] = await Promise.all([
-                auth.getUsername(comment.commenter),
-                loadUserThumbnail(comment.commenter),
-              ]);
-              // _getUsername returns an array: [{ username: "String" }]
+              const usernameResponse = await auth.getUsername(commenterId);
+              let username = commenterId;
               if (usernameResponse && !usernameResponse.error) {
                 if (
                   Array.isArray(usernameResponse) &&
                   usernameResponse.length > 0
                 ) {
-                  commenterUsername =
-                    usernameResponse[0].username || comment.commenter;
+                  username = usernameResponse[0].username || commenterId;
                 } else if (usernameResponse.username) {
-                  commenterUsername = usernameResponse.username;
+                  username = usernameResponse.username;
                 }
               }
-              commenterThumbnail = thumbnail;
+              return { commenterId, username };
             } catch (err) {
-              console.warn(
-                `Could not get username/thumbnail for commenter ${comment.commenter}:`,
-                err
-              );
-              // Keep the userId as fallback
-              commenterUsername = comment.commenter;
+              return { commenterId, username: commenterId };
             }
-          }
-          return {
-            ...comment,
-            commenterUsername: commenterUsername,
-            commenterThumbnail: commenterThumbnail,
-            notes: comment.comment || comment.notes, // Support both 'comment' and 'notes' fields
-          };
-        })
+          })
+        ),
+        loadThumbnailsBatch(uniqueCommenterIds, 10)
+      ]);
+
+      // Build maps for quick lookup
+      const usernameMap = new Map(
+        usernameResults.map(r => [r.commenterId, r.username])
       );
+
+      // Map comments with cached data
+      return comments.map((comment) => {
+        const commenterId = comment.commenter;
+        return {
+          ...comment,
+          commenterUsername: commenterId ? (usernameMap.get(commenterId) || commenterId) : comment.commenter,
+          commenterThumbnail: commenterId ? (thumbnailResults.get(commenterId) || null) : null,
+          notes: comment.comment || comment.notes, // Support both 'comment' and 'notes' fields
+        };
+      });
     };
 
     // Load all reviews for this item
@@ -686,6 +683,44 @@ export default {
           allReviews.value = [];
           return;
         }
+
+        // Get unique user IDs from all reviews
+        const uniqueUserIds = [...new Set(
+          (reviews || [])
+            .map(r => r.user || r.author)
+            .filter(Boolean)
+        )];
+
+        // Load all usernames and thumbnails in parallel with concurrency limit
+        const [usernameResults, thumbnailResults] = await Promise.all([
+          Promise.all(
+            uniqueUserIds.map(async (userId) => {
+              try {
+                const usernameResponse = await auth.getUsername(userId);
+                let username = userId;
+                if (usernameResponse && !usernameResponse.error) {
+                  if (
+                    Array.isArray(usernameResponse) &&
+                    usernameResponse.length > 0
+                  ) {
+                    username = usernameResponse[0].username || userId;
+                  } else if (usernameResponse.username) {
+                    username = usernameResponse.username;
+                  }
+                }
+                return { userId, username };
+              } catch (err) {
+                return { userId, username: userId };
+              }
+            })
+          ),
+          loadThumbnailsBatch(uniqueUserIds, 10)
+        ]);
+
+        // Build maps for quick lookup
+        const usernameMap = new Map(
+          usernameResults.map(r => [r.userId, r.username])
+        );
 
         allReviews.value = await Promise.all(
           (reviews || []).map(async (r) => {
@@ -703,36 +738,9 @@ export default {
 
             const reviewUserId = r.user || r.author;
 
-            // Get username and thumbnail for the reviewer using APIs
-            let username = reviewUserId;
-            let reviewerThumbnail = null;
-            if (reviewUserId) {
-              try {
-                // Load username and thumbnail in parallel
-                const [usernameResponse, thumbnail] = await Promise.all([
-                  auth.getUsername(reviewUserId),
-                  loadUserThumbnail(reviewUserId),
-                ]);
-                if (usernameResponse && !usernameResponse.error) {
-                  if (
-                    Array.isArray(usernameResponse) &&
-                    usernameResponse.length > 0
-                  ) {
-                    username = usernameResponse[0].username || reviewUserId;
-                  } else if (usernameResponse.username) {
-                    username = usernameResponse.username;
-                  }
-                }
-                reviewerThumbnail = thumbnail;
-              } catch (err) {
-                console.warn(
-                  `Could not get username/thumbnail for user ${reviewUserId}:`,
-                  err
-                );
-                // Keep the userId as fallback
-                username = reviewUserId;
-              }
-            }
+            // Get username and thumbnail from cached data
+            const username = reviewUserId ? (usernameMap.get(reviewUserId) || reviewUserId) : reviewUserId;
+            const reviewerThumbnail = reviewUserId ? (thumbnailResults.get(reviewUserId) || null) : null;
 
             // Load comments for each review
             let comments = [];
@@ -1355,46 +1363,37 @@ export default {
           return;
         }
 
-        // Load usernames and thumbnails for each friend
-        const friendsWithNames = await Promise.all(
-          (result || []).map(async (friendItem) => {
-            try {
-              const [usernameResult, thumbnailResult] = await Promise.all([
-                auth.getUsername(friendItem.friend),
-                userProfile.getThumbnail(friendItem.friend),
-              ]);
+        // Load usernames and thumbnails for friends with concurrency limit
+        const friendIds = (result || []).map(f => f.friend);
+        
+        const [usernameResults, thumbnailResults] = await Promise.all([
+          Promise.all(
+            friendIds.map(async (friendId) => {
+              try {
+                const usernameResult = await auth.getUsername(friendId);
+                const usernameData =
+                  Array.isArray(usernameResult) && usernameResult.length > 0
+                    ? usernameResult[0]
+                    : usernameResult;
+                const username = usernameData?.username || friendId;
+                return { friendId, username };
+              } catch (err) {
+                return { friendId, username: friendId };
+              }
+            })
+          ),
+          loadThumbnailsBatch(friendIds, 10)
+        ]);
 
-              const usernameData =
-                Array.isArray(usernameResult) && usernameResult.length > 0
-                  ? usernameResult[0]
-                  : usernameResult;
-              const username = usernameData?.username || friendItem.friend;
-
-              const thumbnailData =
-                Array.isArray(thumbnailResult) && thumbnailResult.length > 0
-                  ? thumbnailResult[0]
-                  : thumbnailResult;
-              const thumbnailUrl =
-                thumbnailData?.thumbnailUrl || thumbnailData?.thumbnail || null;
-
-              return {
-                ...friendItem,
-                friendName: username,
-                friendThumbnail: thumbnailUrl,
-              };
-            } catch (err) {
-              console.error(
-                `[Review] Error loading username/thumbnail for friend ${friendItem.friend}:`,
-                err
-              );
-              return {
-                ...friendItem,
-                friendName: friendItem.friend,
-                friendThumbnail: null,
-              };
-            }
-          })
+        const usernameMap = new Map(
+          usernameResults.map(r => [r.friendId, r.username])
         );
+
+        const friendsWithNames = (result || []).map((friendItem) => ({
+          ...friendItem,
+          friendName: usernameMap.get(friendItem.friend) || friendItem.friend,
+          friendThumbnail: thumbnailResults.get(friendItem.friend) || null,
+        }));
 
         friends.value = friendsWithNames;
         filteredFriends.value = friendsWithNames;
@@ -2301,7 +2300,7 @@ export default {
   font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .upvote-btn:hover:not(:disabled) {
@@ -2311,14 +2310,18 @@ export default {
 }
 
 .upvote-btn.is-upvoted {
-  background: rgba(74, 158, 255, 0.1);
-  border-color: rgba(74, 158, 255, 0.3);
-  color: #4a9eff;
+  background: rgba(255, 107, 157, 0.2);
+  border-color: rgba(255, 107, 157, 0.5);
+  color: #ff6b9d;
+  box-shadow: 0 0 12px rgba(255, 107, 157, 0.3);
+  transform: scale(1.05);
 }
 
 .upvote-btn.is-upvoted:hover:not(:disabled) {
-  background: rgba(74, 158, 255, 0.2);
-  border-color: rgba(74, 158, 255, 0.5);
+  background: rgba(255, 107, 157, 0.3);
+  border-color: #ff6b9d;
+  box-shadow: 0 0 16px rgba(255, 107, 157, 0.4);
+  transform: scale(1.08);
 }
 
 .upvote-btn:disabled {
